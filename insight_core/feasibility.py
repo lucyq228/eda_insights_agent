@@ -1,4 +1,4 @@
-"""Deterministic feasibility of the current scope proposal, plus merging A3's judgment."""
+"""Deterministic feasibility of the current scope proposal, plus specialist judgment."""
 
 from __future__ import annotations
 
@@ -7,10 +7,11 @@ from pathlib import Path
 from . import registry
 from .data import load_table
 from .paths import refuse
-from .state import read_artifact
+from .state import read_artifact, sha, write_artifact
 from .tools_eda import leakage_suspects
 
 ORDER = {"ok": 0, "partial": 1, "blocked": 2}
+AUTO_CHECK_VERSION = 1
 
 
 def auto_check(run_dir: Path) -> dict:
@@ -37,6 +38,38 @@ def auto_check(run_dir: Path) -> dict:
             "counts": {v: sum(s["verdict"] == v for s in steps) for v in ORDER}}
 
 
+def save_auto_check(run_dir: Path) -> dict:
+    """Run the expensive deterministic screen once and persist its inputs."""
+    auto = auto_check(run_dir)
+    run = read_artifact(run_dir, "run.json") or {}
+    artifact = {**auto, "algorithm_version": AUTO_CHECK_VERSION,
+                "profile_sha256": sha(run_dir / "profile.json"),
+                "data_sha256": run.get("data_sha256")}
+    write_artifact(run_dir, "feasibility_auto.json", artifact, upstream="scope_proposal.json")
+    return artifact
+
+
+def load_auto_check(run_dir: Path) -> dict:
+    """Load a current auto check; never silently repeat the raw-data scan."""
+    auto = read_artifact(run_dir, "feasibility_auto.json")
+    run = read_artifact(run_dir, "run.json") or {}
+    stale = []
+    if not auto:
+        stale.append("it has not been run")
+    else:
+        if auto.get("algorithm_version") != AUTO_CHECK_VERSION:
+            stale.append("the feasibility algorithm changed")
+        if (auto.get("upstream") or {}).get("sha256") != sha(run_dir / "scope_proposal.json"):
+            stale.append("the scope proposal changed")
+        if auto.get("profile_sha256") != sha(run_dir / "profile.json"):
+            stale.append("the data profile changed")
+        if auto.get("data_sha256") != run.get("data_sha256"):
+            stale.append("the run data changed")
+    if stale:
+        refuse("feasibility auto-check is missing or stale (" + "; ".join(stale) + "); run check_feasibility.py")
+    return auto
+
+
 def panel_issues(scope: dict, profile: dict) -> list[str]:
     """Panel data needs an explicit decision: an entity_column with a panel tool, or a panel_reason."""
     ent = scope.get("entity_column")
@@ -56,7 +89,7 @@ def panel_issues(scope: dict, profile: dict) -> list[str]:
 
 
 def merge(auto: dict, judgment: dict) -> tuple[dict, list[str]]:
-    """A3 may make a verdict stricter, never looser."""
+    """The specialist may make a verdict stricter, never looser."""
     errors = []
     by_id = {s["step_id"]: s for s in judgment.get("steps", [])}
     steps = []
@@ -79,5 +112,5 @@ def merge(auto: dict, judgment: dict) -> tuple[dict, list[str]]:
         if not judgment.get(key):
             errors.append(f"judgment needs '{key}'")
     if auto["scope_issues"] and not judgment.get("recommendations"):
-        errors.append("scope issues found; add recommendations for A2")
+        errors.append("scope issues found; add recommendations for scope revision")
     return {"steps": steps}, errors

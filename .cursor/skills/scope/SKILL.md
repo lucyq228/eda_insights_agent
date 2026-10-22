@@ -1,9 +1,9 @@
 ---
 name: scope
-description: Turn a vague "find me insights" request into a testable scope for any tabular dataset - the target and its definition, the purpose and decision, drivers and exclusions, segments, 3-6 hypotheses with tool pathways, and questions only the user can answer. Use for the scope_draft milestone (A2 Scope) and to revise the scope after user answers or feasibility feedback.
+description: Turn a vague "find me insights" request into a testable scope for any tabular dataset - the target and its definition, the purpose and decision, drivers and exclusions, segments, 4-10 decision-relevant hypotheses with selectively chosen tool pathways, and questions only the user can answer. Use for the scope_draft milestone and revisions after user answers or feasibility feedback.
 ---
 
-# Scope (A2)
+# Scope (Scope & Feasibility specialist)
 
 ```powershell
 .venv\Scripts\python.exe .cursor\skills\scope\scripts\read_context.py
@@ -49,7 +49,10 @@ See `examples/example_scope.json` for a complete one.
    the decision; drop the ones that would not change it.
 3. **Exclusions.** Exclude ids, free text, columns computed from the target or
    recorded after it (leakage), and anything the user ruled out. Give a reason.
-4. **Hypotheses (3-6).** Start broad, then sharpen:
+4. **Hypotheses (4-10, preferably 4-8).** Use the number warranted by the
+   decision and data. Do not hard-code six, do not create one hypothesis per tool,
+   and do not pad for shelf coverage. If fewer than four meaningful tests exist,
+   add `hypothesis_count_exception` with the reason. Start broad, then sharpen:
    - a screen of all drivers (`target-associations`) - usually H1;
    - the 1-3 most decision-relevant driver relationships (`pair-deep-dive`);
    - a confounding check where segments differ in both driver and target
@@ -75,3 +78,5 @@ See `examples/example_scope.json` for a complete one.
    exclude leakage suspects, reflect answers, and save a new version with a change note.
 
 Do not add `multiple-testing` as a step; it runs automatically.
+The shelf remains available for general analysis, but the pathway must include
+only tools needed for this scope and feasibility assessment.

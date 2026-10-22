@@ -13,7 +13,7 @@ from insight_core.state import milestone_status, read_artifact, write_artifact  
 
 def main() -> None:
     configure_stdout()
-    args = base_parser(__doc__, "manager").parse_args()
+    args = base_parser(__doc__, "coordinator").parse_args()
     run_dir = resolve(args)
     rows = milestone_status(run_dir)
     pending = [f"{r['milestone']}: {r['status']}" for r in rows if r["status"] != "done"]

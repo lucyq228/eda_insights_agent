@@ -9,7 +9,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 REGISTRY = ROOT / "tool_registry.yaml"
-RUN_SUBDIRS = ("drafts", "results", "charts", "datasets")
+RUN_SUBDIRS = ("drafts", "results", "charts", "datasets", "cache", ".locks")
 
 
 def refuse(message: str):

@@ -96,6 +96,7 @@ def test_store_sales_full_flow(tmp_path):
     status = run("run-insights-project", "run_status")
     assert status["milestones"]["feasibility"].startswith("stale")
     run("run-insights-project", "approve_scope", "--user-confirmation", "yes", ok=False)
+    run("feasibility", "check_feasibility")
     unexplained = {**JUDGMENT, "steps": [{"step_id": "H1.S1", "verdict": "blocked"}]}
     run("feasibility", "save_feasibility", "--file", run.draft("feasibility.json", unexplained), ok=False)
     feas = run("feasibility", "save_feasibility", "--file", run.draft("feasibility.json", JUDGMENT))
@@ -111,11 +112,11 @@ def test_store_sales_full_flow(tmp_path):
     run("run-insights-project", "approve_scope", "--user-confirmation", "Looks good, go ahead")
     run("scope", "save_scope", "--file", run.draft("scope.json", EXAMPLE), ok=False)
 
-    run("profile-eda", "data_quality")
-    prep = run("prepare-data", "prepare_data")
+    advanced = run("run-insights-project", "advance_run")
+    assert [s["stage"] for s in advanced["stages"]] == ["data_quality", "prepared_data", "analyses"]
+    prep = run.artifact("prepared_data.json")
     assert any("8 exact duplicate" in x for x in prep["log"])
-    plan = run("insight-shelf", "run_plan")
-    assert not plan["errors"]
+    assert not advanced["stages"][-1]["result"]["errors"]
 
     res = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in (run.dir / "results").glob("*.json")}
     ranked = res["H1.S1"]["findings"]
@@ -161,12 +162,12 @@ def test_store_sales_full_flow(tmp_path):
                                   "reason": "Is staffing stronger in some formats?"}]}
     run("review-insights", "save_review", "--file", run.draft("review.json", review))
     status = run("run-insights-project", "run_status")
-    assert status["reruns_for_A6"]
+    assert status["targeted_followups"]
     run("review-insights", "save_insights", "--file", run.draft("insights.json", {}), ok=False)
 
     fu = run("insight-shelf", "run_tool", "--tool", "segment-correlation", "--params-file",
              run.file("p1.json", {"x": "staff_hours", "by": "store_format"}),
-             "--followup-reason", "A7 asked whether staffing differs by format")
+             "--followup-reason", "The reviewer asked whether staffing differs by format")
     assert fu["result"]["label"] == "F1"
     assert any(f.startswith("HETEROGENEITY") for f in fu["result"]["flags"]), fu["result"]
     assert run("run-insights-project", "run_status")["milestones"]["review"].startswith("stale")
@@ -181,7 +182,13 @@ def test_store_sales_full_flow(tmp_path):
              "evidence": [{"result": "H2.S1", "finding": "promo_spend_k ~ weekly_sales_k | within region"},
                           {"result": "H2.S2", "finding": "promo_spend_k ~ weekly_sales_k | within store_id and period"}]},
             {"id": "I2", "title": "Traffic", "statement": "y", "strength": "strong", "confidence": "high",
-             "evidence": [{"result": "H1.S1", "finding": "foot_traffic ~ weekly_sales_k"}]}],
+             "evidence": [{"result": "H1.S1", "finding": "foot_traffic ~ weekly_sales_k"}]},
+            {"id": "I3", "title": "Price has a curved relationship", "statement": "Sales are highest in a mid-price range.",
+             "strength": "moderate", "confidence": "high",
+             "evidence": [{"result": "H3.S1", "finding": "avg_price ~ weekly_sales_k | curvature"}]},
+            {"id": "I4", "title": "Stock availability matters", "statement": "Higher stockout rates go with lower sales after controls.",
+             "strength": "moderate", "confidence": "high",
+             "evidence": [{"result": "H4.S1", "finding": "stockout_rate ~ weekly_sales_k | controlling foot_traffic, region"}]}],
         "limitations": ["observational"], "next_steps": ["test a promo pilot"]}
     out = run("review-insights", "save_insights", "--file", run.draft("insights.json", insights), ok=False)
     assert any("causal" in i for i in out["issues"])
@@ -189,7 +196,7 @@ def test_store_sales_full_flow(tmp_path):
     insights["insights"][0]["statement"] = "Pooled, promo looks unrelated or negative; within regions it is positive."
     run("review-insights", "save_insights", "--file", run.draft("insights.json", insights))
     rep = run("review-insights", "build_report")
-    assert rep["n_insights"] == 2 and (run.dir / "report.html").stat().st_size > 10_000
+    assert rep["n_insights"] == 4 and (run.dir / "report.html").stat().st_size > 10_000
     html = (run.dir / "report.html").read_text(encoding="utf-8")
     assert "within region" in html and "q = " in html
     assert "Panel data: each store_id" in html and "entities = 80" in html
@@ -216,6 +223,7 @@ def test_attrition_binary_target(tmp_path):
         "unit_of_analysis": "employee", "id_column": "employee_id", "drivers": "all",
         "exclude": [{"column": "exit_interview_done", "reason": "Only happens after leaving."}],
         "segments": ["department"],
+        "hypothesis_count_exception": "This focused regression fixture intentionally tests two pre-specified questions.",
         "hypotheses": [
             {"id": "H1", "statement": "Lower engagement goes with more leaving.", "rationale": "r",
              "support_criteria": "r < -0.1", "pathway": [
@@ -232,11 +240,10 @@ def test_attrition_binary_target(tmp_path):
     auto = run("feasibility", "check_feasibility")
     assert "exit_interview_done" in [x["column"] for x in auto["leakage_suspects"]]
     run("scope", "save_scope", "--file", run.draft("scope.json", scope))
+    run("feasibility", "check_feasibility")
     run("feasibility", "save_feasibility", "--file", run.draft("feasibility.json", JUDGMENT))
     run("run-insights-project", "approve_scope", "--user-confirmation", "approved")
-    run("profile-eda", "data_quality")
-    run("prepare-data", "prepare_data")
-    run("insight-shelf", "run_plan")
+    run("run-insights-project", "advance_run")
     res = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in (run.dir / "results").glob("*.json")}
     ranked = {f["x"]: f for f in res["H1.S1"]["findings"]}
     assert ranked["engagement_score"]["estimate"] < -.1
@@ -253,6 +260,7 @@ def test_tool_target_type_gate(tmp_path, bad_type):
     scope = {"project_name": "p", "purpose": "p", "decision_supported": "d",
              "target": {"column": "department", "type": "categorical", "definition": "department"},
              "unit_of_analysis": "employee", "drivers": ["tenure_years"],
+             "hypothesis_count_exception": "This fixture isolates one type-gate check.",
              "hypotheses": [{"id": "H1", "statement": "s", "rationale": "r", "support_criteria": "c",
                              "pathway": [{"tool": "partial-correlation",
                                           "params": {"x": "tenure_years", "controls": ["commute_km"]},

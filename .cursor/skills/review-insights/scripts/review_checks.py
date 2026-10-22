@@ -1,4 +1,4 @@
-"""Deterministic challenges on every result, grouped by hypothesis (A7 starts here)."""
+"""Deterministic challenges on every result, grouped by hypothesis."""
 
 import sys
 from pathlib import Path
@@ -12,7 +12,7 @@ from insight_core.state import milestone_done  # noqa: E402
 
 def main() -> None:
     configure_stdout()
-    args = base_parser(__doc__, "A7").parse_args()
+    args = base_parser(__doc__, "review-insights").parse_args()
     run_dir = resolve(args)
     if not milestone_done(run_dir, "analyses"):
         emit_json({"error": "analyses are missing, incomplete, or stale"}, ok=False)

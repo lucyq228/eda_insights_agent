@@ -1,5 +1,5 @@
 # The shared tool shelf. Agents pick tools from here; feasibility reads it.
-# phase: eda (before/after scoping), prepare (A5), analysis (A6 pathway steps), report (A7).
+# phase: eda (before/after scoping), prepare, analysis (approved pathway steps), report.
 # needs: numeric_x = the x param must be numeric; date = scope needs a date_column;
 #        entity = scope needs an entity_column (the unit observed repeatedly over time).
 # Param types: column, columns, int, float, str, bool.
@@ -42,8 +42,11 @@ tools:
     target_types: [numeric, binary, categorical]
     params:
       drivers: {type: columns, description: "subset of drivers (default: all scoped drivers)"}
-    method: Spearman r (numeric driver) with Fisher CI; eta with bootstrap CI (categorical driver); Cramer's V for categorical targets.
-    caveats: [Screening only - overlapping drivers share signal, and confounders are not removed.]
+      ci_top: {type: int, default: 3, description: "compute report-grade confidence intervals only for this many top-ranked drivers"}
+    cost_class: medium
+    method: Point estimates rank every scoped driver; report-grade confidence intervals are added only to eligible top-ranked drivers.
+    caveats: [Screening only - overlapping drivers share signal, and confounders are not removed.,
+              Drivers below ci_top and high-cardinality categorical drivers have point estimates but no confidence interval until selected for a deep dive.]
 
   correlation-matrix:
     phase: analysis
@@ -63,6 +66,9 @@ tools:
     params:
       x: {type: column, required: true, description: "the driver"}
       bins: {type: int, default: 10, description: "quantile bins for a numeric driver"}
+      max_levels: {type: int, default: 10, description: "for categorical drivers, keep up to the 10 most frequent levels and combine the rest as Other"}
+    cost_class: medium
+    caveats: [High-cardinality levels are selected by frequency, never by their target result.]
 
   segment-breakdown:
     phase: analysis
@@ -70,8 +76,11 @@ tools:
     question: Does the target level differ across segments (e.g. region, plan, department)?
     target_types: [numeric, binary, categorical]
     params:
-      by: {type: column, required: true, description: "segment column (2-15 levels)"}
-    caveats: [Levels with n < min_n are shown but flagged.]
+      by: {type: column, required: true, description: "segment column"}
+      max_levels: {type: int, default: 10, description: "keep up to the 10 most frequent levels and combine the rest as Other"}
+    cost_class: medium
+    caveats: [Levels with n < min_n are shown but flagged.,
+              High-cardinality levels are selected by frequency, never by their target result.]
 
   segment-correlation:
     phase: analysis

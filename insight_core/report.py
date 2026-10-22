@@ -45,7 +45,9 @@ def build(run_dir: Path) -> dict:
     review = read_artifact(run_dir, "review.json")
     dq = read_artifact(run_dir, "data_quality.json") or {}
     prep = read_artifact(run_dir, "prepared_data.json") or {}
+    analyses = read_artifact(run_dir, "analyses_index.json") or {}
     results = _results(run_dir)
+    skipped = [s for s in analyses.get("steps", []) if s.get("status") == "skipped"]
     qmap = _qmap(results)
 
     md = [f"# {scope['project_name']}", "",
@@ -86,8 +88,10 @@ def build(run_dir: Path) -> dict:
     for label, r in sorted(results.items()):
         tag = " (follow-up: " + r["followup_reason"] + ")" if r.get("followup_reason") else ""
         md.append(f"- `{label}` {r['tool']}{tag}: {r.get('summary') or r.get('error')}")
+    for step in skipped:
+        md.append(f"- `{step['step_id']}` {step['tool']} (user-approved skip): {step.get('skip_reason')}")
     (run_dir / "report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
-    (run_dir / "report.html").write_text(_html(scope, insights, review, blocks, prep, dq, results), encoding="utf-8")
+    (run_dir / "report.html").write_text(_html(scope, insights, review, blocks, prep, dq, results, skipped), encoding="utf-8")
     return {"files": ["report.md", "report.html"], "n_insights": len(insights["insights"]),
             "n_charts": sum(len(b[2]) for b in blocks)}
 
@@ -97,7 +101,7 @@ def _img(path: str) -> str:
     return f'<img src="data:image/png;base64,{data}" alt="chart">'
 
 
-def _html(scope, insights, review, blocks, prep, dq, results) -> str:
+def _html(scope, insights, review, blocks, prep, dq, results, skipped) -> str:
     e = html.escape
     cards = []
     for ins, ev_lines, imgs in blocks:
@@ -114,6 +118,8 @@ def _html(scope, insights, review, blocks, prep, dq, results) -> str:
     nexts = "".join(f"<li>{e(x)}</li>" for x in insights.get("next_steps", []))
     runs = "".join(f"<li><code>{e(k)}</code> {e(r['tool'])}: {e(str(r.get('summary') or r.get('error')))}</li>"
                    for k, r in sorted(results.items()))
+    runs += "".join(f"<li><code>{e(s['step_id'])}</code> {e(s['tool'])} (user-approved skip): "
+                    f"{e(str(s.get('skip_reason')))}</li>" for s in skipped)
     t = scope["target"]
     panel_html = f'<p class="note">{e(panel_line(scope))}</p>' if panel_line(scope) else ""
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>{e(scope['project_name'])}</title>
@@ -126,7 +132,7 @@ h1{{margin-bottom:4px}} .meta{{color:#52606d}} .note{{background:#f0f4f8;border-
 .imgs img{{max-width:48%;margin:6px 1% 0 0;border:1px solid #eee}}
 table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #d9e2ec;padding:6px 8px;vertical-align:top}}
 .v-supported{{color:#196c2e;font-weight:600}} .v-not_supported{{color:#a61b1b;font-weight:600}}
-.v-partially_supported,.v-inconclusive{{color:#8a4b08;font-weight:600}}
+.v-partially_supported,.v-inconclusive,.v-not_evaluated{{color:#8a4b08;font-weight:600}}
 </style></head><body>
 <h1>{e(scope['project_name'])}</h1>
 <p class="meta"><b>Purpose:</b> {e(scope['purpose'])}<br><b>Decision supported:</b> {e(scope['decision_supported'])}<br>

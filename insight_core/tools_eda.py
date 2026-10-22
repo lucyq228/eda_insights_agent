@@ -32,7 +32,9 @@ def leakage_suspects(df: pd.DataFrame, scope: dict, types: dict[str, str], thres
     for c, t in types.items():
         if c == tcol or t not in ("numeric", "binary", "categorical"):
             continue
-        res = stats.associate(df[c], y, "numeric" if t == "numeric" else "categorical", y_type)
+        # Screening uses only the point estimate. Report-grade intervals are
+        # calculated later for relationships selected by the approved plan.
+        res = stats.associate_point(df[c], y, "numeric" if t == "numeric" else "categorical", y_type)
         est = abs(res["estimate"] or 0)
         name_hit = any(tok in c.lower() for tok in tokens)
         why = []
@@ -94,7 +96,7 @@ def profile_dataset(df: pd.DataFrame, run_dir, label: str = "profile") -> dict:
     return prof
 
 
-def data_quality_check(ctx: Ctx, params: dict) -> dict:
+def data_quality_check(ctx: Ctx, params: dict, precomputed_leakage: list[dict] | None = None) -> dict:
     df, scope = ctx.df, ctx.scope
     y = target_series(df, scope)
     checks = []
@@ -141,7 +143,7 @@ def data_quality_check(ctx: Ctx, params: dict) -> dict:
                 add(f"outliers: {c}", "warn", f"{out} values beyond 3 IQR; Spearman and binned views are robust to them")
         if ctx.types[c] == "categorical" and df[c].nunique() > 15:
             add(f"cardinality: {c}", "warn", f"{df[c].nunique()} levels; rare levels will be grouped as 'Other'")
-    leaks = leakage_suspects(df, scope, ctx.types)
+    leaks = precomputed_leakage if precomputed_leakage is not None else leakage_suspects(df, scope, ctx.types)
     for lk in leaks:
         used = lk["column"] in ctx.drivers
         add(f"leakage: {lk['column']}", "fail" if used else "pass",

@@ -11,7 +11,7 @@ testing every column until something looks significant, reading correlations as
 causes, or columns that quietly leak the answer. The agents are built around
 those failure modes:
 
-- the manager asks **what outcome matters and what decision it informs** before any analysis;
+- the coordinator asks **what outcome matters and what decision it informs** before any analysis;
 - hypotheses are written and approved **before** results exist, and every test joins one
   **multiple-testing** family (Benjamini-Hochberg);
 - feasibility **blocks leakage** (columns derived from the target) and under-powered cuts;
@@ -35,22 +35,24 @@ or bring your own file:
 
 > Use /run-insights-project on `C:\path\to\my_data.xlsx`. What correlates with churn?
 
-The manager profiles the file, asks you for the target and purpose, shows you a
+The Cursor coordinator profiles the file, asks you for the target and purpose, shows you a
 plan with feasibility verdicts, waits for your yes, then runs everything and
 returns `runs/<run>/report.html`.
 
 ## The team
 
-| Step | Agent | What it does |
+| Step | Role | What it does |
 |---|---|---|
-| route | A1 Manager (main chat) | talks to you, asks the questions, approves only on your yes |
-| profile | A4 Data Quality & EDA | column types, missingness, candidate targets, flags |
-| scope | A2 Scope | target, purpose, exclusions, 3-6 hypotheses with tool pathways |
-| feasibility | A3 Feasibility | can the data answer each step? leakage, power, dates, segments |
-| quality | A4 | duplicates, key uniqueness, target balance, outliers, leakage |
-| prepare | A5 Data Prep | one clean analysis table |
-| analyse | A6 Analysis | runs the approved plan; reruns as recorded follow-ups |
-| review + report | A7 Review & Insights | verdicts, reruns, 2-7 insights, HTML report |
+| coordinate | Coordinator (main Cursor chat) | talks to you, asks questions, approves only on your yes |
+| profile | Deterministic pipeline | column types, missingness, candidate targets, flags |
+| scope + feasibility | Scope & Feasibility specialist | 4-10 hypotheses, a selective shelf-tool manifest, leakage/power/type checks |
+| quality + prepare | Deterministic pipeline | quality gates and one clean analysis table |
+| analyse | Deterministic pipeline | runs only the approved selected steps; reuses completed results |
+| review + report | Reviewer & Insights specialist | verdicts, targeted follow-ups, 4-10 findings, HTML report |
+
+The shelf is deliberately broader than any one run. Tool selection stays adaptive:
+the specialist chooses the smallest credible pathway for the approved scope, and
+`run_plan.py` executes that manifest rather than every tool.
 
 ## The tool shelf (`tool_registry.yaml`)
 
@@ -58,7 +60,7 @@ returns `runs/<run>/report.html`.
 |---|---|
 | profile-dataset, data-quality-check, eda-overview | what is in the table; is it fit for the scope |
 | prepare-dataset | the analysis table |
-| target-associations | which drivers move with the target, ranked, with CI |
+| target-associations | rank all scoped drivers by a fast point estimate; add CI to selected top results |
 | correlation-matrix | which drivers overlap each other |
 | pair-deep-dive | the shape of one relationship |
 | segment-breakdown | does the target differ by segment |
@@ -74,6 +76,8 @@ returns `runs/<run>/report.html`.
 
 Measures adapt to column types: Spearman r for numeric drivers (a binary target is
 coded 1/0), eta for categorical drivers, Cramer's V or eta for a categorical target.
+High-cardinality reporting keeps the 10 most frequent levels and combines the rest
+as `Other`; levels are never selected by their target outcome.
 
 ## Demo datasets
 
@@ -91,7 +95,7 @@ The planted truth lives in `synthetic/`, which the agents never open.
 ## Layout
 
 ```text
-.cursor/agents/      A2-A7 subagents          .cursor/skills/   manager playbook + one skill per task
+.cursor/agents/      two specialist roles     .cursor/skills/   coordinator playbook + deterministic tasks
 .cursor/rules/       guardrails (always on)   .cursor/hooks/    run log for subagent activity
 insight_core/        shared Python            tool_registry.yaml  the shelf
 data/ examples/ scripts/ tests/               runs/             one folder per run (gitignored)

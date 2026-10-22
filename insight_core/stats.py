@@ -39,11 +39,28 @@ def _boot_ci(fn, *arrays, alpha: float = .05) -> tuple[float, float]:
 
 
 def _eta(groups: np.ndarray, y: np.ndarray) -> float:
+    """Correlation ratio using one factorization and vectorized group sums."""
+    codes, _ = pd.factorize(groups, sort=False)
+    return _eta_codes(codes, y)
+
+
+def _eta_codes(codes: np.ndarray, y: np.ndarray) -> float:
+    """Correlation ratio for non-negative integer group codes."""
+    codes = np.asarray(codes, dtype=np.intp)
+    y = np.asarray(y, dtype=float)
+    valid = (codes >= 0) & np.isfinite(y)
+    codes, y = codes[valid], y[valid]
+    if not len(y):
+        return np.nan
     grand = y.mean()
     ss_total = ((y - grand) ** 2).sum()
     if ss_total == 0:
         return np.nan
-    ss_between = sum(len(y[groups == g]) * (y[groups == g].mean() - grand) ** 2 for g in np.unique(groups))
+    counts = np.bincount(codes)
+    sums = np.bincount(codes, weights=y, minlength=len(counts))
+    used = counts > 0
+    means = sums[used] / counts[used]
+    ss_between = (counts[used] * (means - grand) ** 2).sum()
     return float(np.sqrt(ss_between / ss_total))
 
 
@@ -60,7 +77,24 @@ def _round(d: dict) -> dict:
                 (None if isinstance(v, (float, np.floating)) else v)) for k, v in d.items()}
 
 
+def associate_point(x: pd.Series, y: pd.Series, x_type: str, y_type: str, alpha: float = .05) -> dict:
+    """Return an association point estimate without resampling a confidence interval."""
+    return _associate(x, y, x_type, y_type, alpha=alpha, with_interval=False)
+
+
+def associate_with_interval(x: pd.Series, y: pd.Series, x_type: str, y_type: str,
+                            alpha: float = .05) -> dict:
+    """Return a report-grade association with its confidence interval."""
+    return _associate(x, y, x_type, y_type, alpha=alpha, with_interval=True)
+
+
 def associate(x: pd.Series, y: pd.Series, x_type: str, y_type: str, alpha: float = .05) -> dict:
+    """Backward-compatible report-grade association."""
+    return associate_with_interval(x, y, x_type, y_type, alpha)
+
+
+def _associate(x: pd.Series, y: pd.Series, x_type: str, y_type: str, alpha: float,
+               with_interval: bool) -> dict:
     """x is a driver, y the target. Types: numeric | binary | categorical.
 
     A binary target arrives already coded 0/1 and counts as numeric here.
@@ -73,24 +107,26 @@ def associate(x: pd.Series, y: pd.Series, x_type: str, y_type: str, alpha: float
     y_num = y_type in ("numeric", "binary")
     if x_type == "numeric" and y_num:
         r, p = stats.spearmanr(d["x"], d["y"])
-        lo, hi = fisher_ci(r, n, alpha)
+        lo, hi = fisher_ci(r, n, alpha) if with_interval else (np.nan, np.nan)
         pearson = stats.pearsonr(d["x"], d["y"])[0]
         out = {"metric": "spearman_r", "estimate": r, "ci_low": lo, "ci_high": hi, "p": p, "n": n,
                "pearson_r": pearson, "direction": "positive" if r > 0 else "negative"}
     elif x_type in ("categorical", "binary") and y_num:
         g, v = d["x"].astype(str).to_numpy(), d["y"].to_numpy(float)
-        eta = _eta(g, v)
-        p = stats.f_oneway(*[v[g == k] for k in np.unique(g)]).pvalue
-        lo, hi = _boot_ci(_eta, g, v, alpha=alpha)
+        codes, levels = pd.factorize(g, sort=False)
+        eta = _eta_codes(codes, v)
+        p = stats.f_oneway(*[v[codes == k] for k in range(len(levels))]).pvalue
+        lo, hi = _boot_ci(_eta_codes, codes, v, alpha=alpha) if with_interval else (np.nan, np.nan)
         means = d.groupby(d["x"].astype(str))["y"].mean().sort_values()
         out = {"metric": "eta", "estimate": eta, "ci_low": lo, "ci_high": hi, "p": p, "n": n,
                "direction": f"highest in {means.index[-1]}, lowest in {means.index[0]}",
                "level_means": {k: round(float(m), 4) for k, m in means.items()}}
     elif x_type == "numeric" and y_type == "categorical":
         g, v = d["y"].astype(str).to_numpy(), d["x"].to_numpy(float)
-        eta = _eta(g, v)
-        p = stats.f_oneway(*[v[g == k] for k in np.unique(g)]).pvalue
-        lo, hi = _boot_ci(_eta, g, v, alpha=alpha)
+        codes, levels = pd.factorize(g, sort=False)
+        eta = _eta_codes(codes, v)
+        p = stats.f_oneway(*[v[codes == k] for k in range(len(levels))]).pvalue
+        lo, hi = _boot_ci(_eta_codes, codes, v, alpha=alpha) if with_interval else (np.nan, np.nan)
         means = d.groupby(d["y"].astype(str))["x"].mean().sort_values()
         out = {"metric": "eta", "estimate": eta, "ci_low": lo, "ci_high": hi, "p": p, "n": n,
                "direction": f"driver highest when target={means.index[-1]}"}
@@ -98,7 +134,7 @@ def associate(x: pd.Series, y: pd.Series, x_type: str, y_type: str, alpha: float
         a, b = d["x"].astype(str).to_numpy(), d["y"].astype(str).to_numpy()
         v = _cramers_v(a, b)
         p = stats.chi2_contingency(pd.crosstab(a, b).to_numpy())[1]
-        lo, hi = _boot_ci(_cramers_v, a, b, alpha=alpha)
+        lo, hi = _boot_ci(_cramers_v, a, b, alpha=alpha) if with_interval else (np.nan, np.nan)
         out = {"metric": "cramers_v", "estimate": v, "ci_low": lo, "ci_high": hi, "p": p, "n": n,
                "direction": "see breakdown"}
     return _round(out)

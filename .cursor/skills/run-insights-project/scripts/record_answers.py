@@ -17,7 +17,7 @@ from insight_core.state import read_artifact, write_artifact  # noqa: E402
 
 def main() -> None:
     configure_stdout()
-    p = base_parser(__doc__, "manager")
+    p = base_parser(__doc__, "coordinator")
     p.add_argument("--answers-file", required=True)
     args = p.parse_args()
     run_dir = resolve(args)
@@ -44,7 +44,7 @@ def main() -> None:
                 f"context items={len(new.get('user_context', []))}")
     open_q = sorted(known - set(store["answers"]))
     emit_json({"recorded": list(new.get("answers", {})), "context_items": len(store["user_context"]),
-               "still_open": open_q, "next": "send the answers to A2 to revise the scope, then A3 rechecks feasibility"})
+               "still_open": open_q, "next": "send the answers to the scope-feasibility specialist for revision"})
 
 
 if __name__ == "__main__":

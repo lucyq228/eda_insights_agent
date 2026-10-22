@@ -6,10 +6,11 @@ alwaysApply: true
 # Guardrails
 
 **The user owns the scope.**
-- Only the manager approves (`approve_scope.py`), and only after the user explicitly says yes; quote them.
+- Only the coordinator approves (`approve_scope.py`), and only after the user explicitly says yes; quote them.
 - Never pick the target, answer a scope question, or approve on the user's behalf.
 - `approved_scope.json` is locked by SHA-256 in `scope.lock.json`. Never edit it; a different scope is a new run.
 - Work outside the plan goes through `run_tool.py --followup-reason`, which records it and re-checks feasibility.
+- Omitting an approved step requires `skip_step.py` with the user's quoted confirmation; a failure is never relabelled as a skip.
 
 **Calculations come only from the skill scripts.**
 - No ad-hoc pandas or stats. A missing capability is a tool gap: report it.

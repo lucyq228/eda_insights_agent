@@ -1,6 +1,6 @@
 ---
 name: insight-shelf
-description: The shared analysis tools for any tabular dataset - target screen, correlation matrix, pair deep dive, segment breakdown, segment correlation with Simpson's paradox check, partial correlation, nonlinearity, time trend with lags, driver importance, panel within/between-entity decomposition and drivers, and automatic multiple-testing correction - with metadata in tool_registry.yaml. Use to browse tools when scoping, to run the approved plan (A6), or to run a recorded follow-up.
+description: The shared analysis tools for any tabular dataset - target screen, correlation matrix, pair deep dive, segment breakdown, segment correlation with Simpson's paradox check, partial correlation, nonlinearity, time trend with lags, driver importance, panel within/between-entity decomposition and drivers, and automatic multiple-testing correction - with metadata in tool_registry.yaml. Use to browse tools when scoping, run only the approved selected plan, or run a recorded follow-up.
 ---
 
 # Insight shelf
@@ -13,7 +13,7 @@ description: The shared analysis tools for any tabular dataset - target screen, 
 
 | Tool | Question it answers |
 |---|---|
-| `target-associations` | Which drivers move with the target, ranked (Spearman / eta / Cramer's V, with CI) |
+| `target-associations` | Which drivers move with the target, ranked by point estimate; CI on selected top results |
 | `correlation-matrix` | Which numeric drivers overlap each other |
 | `pair-deep-dive` | What one driver-target relationship looks like (binned or group means) |
 | `segment-breakdown` | Does the target differ across segments |
@@ -33,3 +33,9 @@ p, n, direction` (panel findings add `n_entities`). Results go to `results/<labe
 Guardrails: tools run only on the approved scope and prepared data; every call is
 re-checked for feasibility; follow-ups need a reason, are shown in the report, and
 join the multiple-testing family.
+
+The shelf is a menu, not a checklist. `run_plan.py` runs only steps named in the
+approved hypothesis pathways. Broad screens use point estimates; report-grade
+intervals are reserved for selected results and cached. Categorical deep dives
+with more than 10 levels keep the most frequent 10 and combine the rest as
+`Other`, selected without looking at the target.

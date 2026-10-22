@@ -64,8 +64,17 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
                 errors.append(f"{h.get('id')}: unknown tool '{step.get('tool')}'")
             elif not step.get("purpose"):
                 errors.append(f"{h.get('id')}: step '{step['tool']}' needs a purpose")
-    if len(scope["hypotheses"]) > 8:
-        warnings.append("more than 8 hypotheses; keep the demo focused")
+    n_hypotheses = len(scope["hypotheses"])
+    if n_hypotheses > 10:
+        errors.append("use no more than 10 hypotheses; merge overlapping questions and keep only decision-relevant tests")
+    elif n_hypotheses < 4:
+        exception = str(scope.get("hypothesis_count_exception") or "").strip()
+        if not exception:
+            errors.append("use 4 to 10 hypotheses, or add hypothesis_count_exception explaining why fewer meaningful tests exist")
+        else:
+            warnings.append(f"only {n_hypotheses} hypotheses by explicit exception: {exception}")
+    elif n_hypotheses > 8:
+        warnings.append("9-10 hypotheses is allowed, but confirm each one changes the decision and is not shelf-coverage padding")
     qids = [q.get("id") for q in scope.get("user_questions", [])]
     if len(qids) != len(set(qids)):
         errors.append("user question ids must be unique")

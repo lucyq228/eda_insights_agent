@@ -12,6 +12,7 @@ import statsmodels.api as sm
 from scipy import stats as st
 
 from . import charts, stats
+from .association_cache import associate_cached
 from .context import Ctx
 
 
@@ -47,25 +48,65 @@ def _group_table(seg: pd.Series, y: pd.Series) -> pd.DataFrame:
     return t.drop(columns="std").sort_values("mean", ascending=False)
 
 
+def group_top_levels(series: pd.Series, max_levels: int = 10, other_label: str = "Other") -> tuple[pd.Series, dict]:
+    """Keep the most frequent levels and combine the rest without looking at the target."""
+    max_levels = max(2, min(10, int(max_levels)))
+    text = series.astype("string")
+    counts = text.value_counts(dropna=True).rename_axis("level").reset_index(name="n")
+    counts["sort_key"] = counts["level"].astype(str)
+    counts = counts.sort_values(["n", "sort_key"], ascending=[False, True], kind="stable")
+    original_levels = len(counts)
+    kept = counts.head(max_levels)["level"].astype(str).tolist()
+    grouped = text.map(lambda value: value if pd.isna(value) or str(value) in kept else other_label)
+    other_n = int((grouped == other_label).sum()) if original_levels > max_levels else 0
+    metadata = {
+        "applied": original_levels > max_levels,
+        "selection": "top levels by frequency; remaining levels combined as Other",
+        "original_levels": original_levels,
+        "max_levels": max_levels,
+        "kept_levels": kept,
+        "other_n": other_n,
+        "other_share": round(other_n / max(1, int(text.notna().sum())), 4),
+    }
+    return grouped, metadata
+
+
 def target_associations(ctx: Ctx, params: dict) -> dict:
     drivers = params.get("drivers") or ctx.drivers
     findings = []
     for c in drivers:
-        res = stats.associate(ctx.df[c], ctx.df[ctx.target], _xtype(ctx, c), ctx.target_type, ctx.alpha)
+        # A broad screen needs ranking, not hundreds of resamples per column.
+        res = associate_cached(ctx, c, _xtype(ctx, c), with_interval=False)
         findings.append(_finding(f"{c} ~ {ctx.target}", c, ctx.target, res, strength=stats.strength(res["estimate"])))
+    findings.sort(key=lambda f: -abs(f["estimate"] or 0))
+    ci_top = max(0, min(int(params.get("ci_top", 3)), len(findings)))
+    intervals_computed = 0
+    for i in range(ci_top):
+        c = findings[i]["x"]
+        if _xtype(ctx, c) == "categorical" and ctx.df[c].nunique(dropna=True) > 10:
+            findings[i]["interval_status"] = "screening_point_estimate_high_cardinality"
+            findings[i]["report_grade_next_step"] = "pair-deep-dive (top 10 levels by frequency plus Other)"
+            continue
+        res = associate_cached(ctx, c, _xtype(ctx, c), with_interval=True)
+        findings[i] = _finding(f"{c} ~ {ctx.target}", c, ctx.target, res,
+                               strength=stats.strength(res["estimate"]), interval_status="report_grade")
+        intervals_computed += 1
+    for f in findings[ci_top:]:
+        f["interval_status"] = "screening_point_estimate"
     ok = [f for f in findings if f["p"] is not None]
     for f, q in zip(ok, stats.bh_qvalues([f["p"] for f in ok])):
         f["q_within_tool"] = q
-    findings.sort(key=lambda f: -abs(f["estimate"] or 0))
     top = [f for f in findings if f["estimate"] is not None][:15]
     chart = charts.ci_bars([f"{f['x']} ({f['metric']})" for f in top], [f["estimate"] for f in top],
                            [f["ci_low"] if f["ci_low"] is not None else f["estimate"] for f in top],
                            [f["ci_high"] if f["ci_high"] is not None else f["estimate"] for f in top],
-                           f"Association with {ctx.target} (95% CI)", "estimate", ctx.chart("ranked"))
+                           f"Association with {ctx.target} (95% CI where report-grade)", "estimate", ctx.chart("ranked"))
     lead = ", ".join(f"{f['x']} {f['metric']}={f['estimate']}" for f in top[:3])
     return {"summary": f"{len(findings)} drivers ranked; strongest: {lead}", "findings": findings,
             "tables": {"ranked": pd.DataFrame(findings)}, "charts": [chart],
-            "notes": ["eta and Cramer's V are unsigned (0 to 1); Spearman r is signed",
+            "notes": [f"report-grade intervals were computed for {intervals_computed} of the top {ci_top} ranked drivers; the rest are screening point estimates",
+                      "high-cardinality drivers need a selected deep dive using the 10 most frequent levels plus Other; ranking screens all levels",
+                      "eta and Cramer's V are unsigned (0 to 1); Spearman r is signed",
                       "these are one-at-a-time associations; overlapping drivers can share the same signal"]}
 
 
@@ -85,37 +126,51 @@ def correlation_matrix(ctx: Ctx, params: dict) -> dict:
 
 def pair_deep_dive(ctx: Ctx, params: dict) -> dict:
     x = params["x"]
-    res = stats.associate(ctx.df[x], ctx.df[ctx.target], _xtype(ctx, x), ctx.target_type, ctx.alpha)
+    x_values = ctx.df[x]
+    grouping = None
+    if _xtype(ctx, x) == "categorical":
+        x_values, grouping = group_top_levels(x_values, params.get("max_levels", 10))
+    variant = f"top-{grouping['max_levels']}-by-frequency" if grouping and grouping["applied"] else "raw"
+    res = associate_cached(ctx, x, _xtype(ctx, x), with_interval=True, values=x_values, variant=variant)
     f = _finding(f"{x} ~ {ctx.target}", x, ctx.target, res, strength=stats.strength(res["estimate"]))
+    extra = ({"level_grouping": grouping,
+              "notes": ["high-cardinality levels were selected only by frequency, never by target outcome"]}
+             if grouping and grouping["applied"] else {})
     if ctx.target_type == "categorical":
-        table = pd.crosstab(ctx.df[x] if _xtype(ctx, x) == "categorical" else pd.qcut(ctx.df[x], 5, duplicates="drop"),
+        table = pd.crosstab(x_values if _xtype(ctx, x) == "categorical" else pd.qcut(x_values, 5, duplicates="drop"),
                             ctx.df[ctx.target], normalize="index").round(3).reset_index().astype(str)
         return {"summary": f"{x}: {res['metric']}={res['estimate']} (n={res['n']})", "findings": [f],
-                "tables": {"profile": table}, "charts": []}
+                "tables": {"profile": table}, "charts": [], **extra}
     if _xtype(ctx, x) == "numeric":
-        table = _binned(ctx.df[x], ctx.df[ctx.target], int(params.get("bins", 10)))
+        table = _binned(x_values, ctx.df[ctx.target], int(params.get("bins", 10)))
         chart = charts.binned_line(table, x, ctx.target, f"{ctx.target} across {x} deciles (95% CI)", ctx.chart("binned"))
     else:
-        table = _group_table(ctx.df[x], ctx.df[ctx.target])
+        table = _group_table(x_values, ctx.df[ctx.target])
         chart = charts.group_bars(table, "level", f"{ctx.target} by {x} (95% CI)", f"mean {ctx.target}", ctx.chart("groups"))
     return {"summary": f"{x}: {res['metric']}={res['estimate']} [{res['ci_low']}, {res['ci_high']}], n={res['n']}",
-            "findings": [f], "tables": {"profile": table}, "charts": [chart]}
+            "findings": [f], "tables": {"profile": table}, "charts": [chart], **extra}
 
 
 def segment_breakdown(ctx: Ctx, params: dict) -> dict:
     by = params["by"]
-    res = stats.associate(ctx.df[by], ctx.df[ctx.target], "categorical", ctx.target_type, ctx.alpha)
+    segments, grouping = group_top_levels(ctx.df[by], params.get("max_levels", 10))
+    variant = f"top-{grouping['max_levels']}-by-frequency" if grouping["applied"] else "raw"
+    res = associate_cached(ctx, by, "categorical", with_interval=True, values=segments, variant=variant)
     f = _finding(f"{by} (segments) ~ {ctx.target}", by, ctx.target, res)
+    extra = ({"level_grouping": grouping,
+              "notes": ["high-cardinality levels were selected only by frequency, never by target outcome"]}
+             if grouping["applied"] else {})
     if ctx.target_type == "categorical":
-        table = pd.crosstab(ctx.df[by], ctx.df[ctx.target], normalize="index").round(3).reset_index()
-        return {"summary": f"{by}: Cramer's V={res['estimate']}", "findings": [f], "tables": {"breakdown": table}, "charts": []}
-    table = _group_table(ctx.df[by], ctx.df[ctx.target])
+        table = pd.crosstab(segments, ctx.df[ctx.target], normalize="index").round(3).reset_index()
+        return {"summary": f"{by}: Cramer's V={res['estimate']}", "findings": [f],
+                "tables": {"breakdown": table}, "charts": [], **extra}
+    table = _group_table(segments, ctx.df[ctx.target])
     small = table[table["n"] < ctx.min_n]["level"].tolist()
     chart = charts.group_bars(table, "level", f"{ctx.target} by {by} (95% CI)", f"mean {ctx.target}", ctx.chart("bars"))
     gap = float(table["mean"].max() - table["mean"].min())
     return {"summary": f"{by}: {res['metric']}={res['estimate']}, gap between highest and lowest level {gap:.3g}",
             "findings": [f], "tables": {"breakdown": table}, "charts": [chart],
-            "flags": [f"levels with n < {ctx.min_n}: {small}"] if small else []}
+            "flags": [f"levels with n < {ctx.min_n}: {small}"] if small else [], **extra}
 
 
 def _partial_r(x: np.ndarray, y: np.ndarray, Z: np.ndarray) -> float:
@@ -128,13 +183,17 @@ def segment_correlation(ctx: Ctx, params: dict) -> dict:
     d = ctx.df[[x, by, ctx.target]].dropna()
     pooled = stats.associate(d[x], d[ctx.target], "numeric", ctx.target_type, ctx.alpha)
     findings = [_finding(f"{x} ~ {ctx.target} | pooled", x, ctx.target, pooled, segment="pooled")]
-    rows = []
+    rows, undefined = [], []
     for level, g in d.groupby(by):
         if len(g) < ctx.min_n:
             continue
         r = stats.associate(g[x], g[ctx.target], "numeric", ctx.target_type, ctx.alpha)
         findings.append(_finding(f"{x} ~ {ctx.target} | {by}={level}", x, ctx.target, r, segment=str(level)))
-        rows.append((str(level), r["estimate"], len(g)))
+        estimate = r["estimate"]
+        if estimate is None or not np.isfinite(estimate):
+            undefined.append(str(level))
+            continue
+        rows.append((str(level), float(estimate), len(g)))
     rx, ry = d[x].rank().to_numpy(float), d[ctx.target].rank().to_numpy(float)
     Z = pd.get_dummies(d[by].astype(str), drop_first=True, dtype=float).to_numpy()
     within_r = _partial_r(rx, ry, Z)
@@ -151,6 +210,9 @@ def segment_correlation(ctx: Ctx, params: dict) -> dict:
     q_stat = float((w * (z - (w * z).sum() / w.sum()) ** 2).sum()) if len(rows) > 1 else np.nan
     het_p = float(st.chi2.sf(q_stat, len(rows) - 1)) if len(rows) > 1 else None
     flags = []
+    if undefined:
+        flags.append(f"NOT ESTIMABLE: {x} does not vary within {by} for {', '.join(undefined)}, "
+                     "so those levels have no within-level correlation")
     pr, wr = pooled["estimate"] or 0, within_r
     if np.sign(pr) != np.sign(wr) and max(abs(pr), abs(wr)) >= .1 or abs(pr - wr) >= .15:
         flags.append(f"SIMPSON/CONFOUNDING: pooled r={pr:.2f} but within-{by} r={wr:.2f}; "

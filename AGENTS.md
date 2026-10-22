@@ -5,23 +5,20 @@ Bring any table (CSV, TSV, XLSX, Parquet) and ask "what insights are in here?" o
 about and why, proposes a testable plan, checks it against the data, and only
 after you approve runs it, challenges it, and writes a short report.
 
-There is no orchestrator program. Agents are Markdown files; every calculation
-is a deterministic script packaged as a skill.
+Cursor is the host. Three logical roles make decisions; every calculation and
+pipeline transition is a deterministic script packaged as a skill.
 
 ## The team
 
-| Agent | Where it lives | Model | Owns |
-|---|---|---|---|
-| A1 Routing Manager | Main chat, following `.cursor/skills/run-insights-project/SKILL.md` | the chat's model | user dialogue, approval, routing |
-| A2 Scope | `.cursor/agents/a2-scope.md` | grok-4.7-high-fast | `scope_proposal.json` |
-| A3 Feasibility | `.cursor/agents/a3-feasibility.md` | grok-4.7-high-fast | `feasibility.json` |
-| A4 Data Quality & EDA | `.cursor/agents/a4-data-quality-eda.md` | composer-2.5 | `profile.json`, `data_quality.json` |
-| A5 Data Prep | `.cursor/agents/a5-data-prep.md` | composer-2.5 | `prepared_data.json` |
-| A6 Analysis | `.cursor/agents/a6-analysis.md` | composer-2.5 | `results/`, `analyses_index.json` |
-| A7 Review & Insights | `.cursor/agents/a7-review-insights.md` | grok-4.7-high-fast | `review.json`, `insights.json`, `report.html` |
+| Role | Where it lives | Owns |
+|---|---|---|
+| Coordinator | Main Cursor chat using `.cursor/skills/run-insights-project/SKILL.md` | user dialogue, approval, deterministic execution |
+| Scope & Feasibility specialist | `.cursor/agents/a2-scope-feasibility.md` | `scope_proposal.json`, `feasibility.json` |
+| Reviewer & Insights specialist | `.cursor/agents/a3-review-insights.md` | `review.json`, `insights.json`, `report.html` |
 
-The shared tools (the shelf) are 17 tools in `tool_registry.yaml`, implemented in
-`insight_core/`. Agents pick analysis tools from the registry. For panel data (the
+The shared tools (the shelf) remain in `tool_registry.yaml`, implemented in
+`insight_core/`. The scope specialist selects only the tools needed by the approved
+hypotheses; the deterministic runner does not run the whole shelf. For panel data (the
 same stores, restaurants, markets, or customers observed over time) the scope sets
 `entity_column` and adds `panel-decomposition` / `panel-drivers`, which split each
 association into within-entity and between-entity parts.
@@ -29,13 +26,13 @@ association into within-entity and between-entity parts.
 ## Lifecycle (never skip a step)
 
 ```text
-start -> A4 profile -> manager asks target + purpose -> A2 scope -> A3 feasibility
- -> user loop (answers, revisions) -> user approves -> lock scope
- -> A4 data quality -> A5 prepare -> A6 analyses
- -> A7 review (may request reruns) -> A7 insights -> A7 report -> finalize
+start -> deterministic profile -> coordinator asks target + purpose
+ -> scope/feasibility specialist -> user loop -> user approves -> lock scope
+ -> deterministic quality + preparation + selected analysis plan
+ -> reviewer/insights specialist (may request targeted follow-ups) -> report -> finalize
 ```
 
-Subagents cannot talk to the user. They return questions to the manager, who
+Specialists cannot talk to the user. They return questions to the coordinator, who
 asks and records the answers.
 
 ## Non-negotiable rules
@@ -64,6 +61,6 @@ non-zero when it refuses or fails. Pass structured input as files (`--file`,
 - `data/`: two demo datasets (store weekly sales, employee attrition). Your own files can live anywhere.
 - `insight_core/`: shared Python (data profiling, stats, tools, scope lock, run state, report).
 - `tool_registry.yaml`: what each tool answers, what it needs, its caveats.
-- `.cursor/skills/`: the manager playbook and one skill per agent task.
+- `.cursor/skills/`: the coordinator playbook and deterministic task skills.
 - `examples/example_scope.json`: a complete approved-quality scope for the store data.
 - `runs/<run-id>/`: every artifact, charts, `report.html`, and `live_run.log`.

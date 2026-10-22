@@ -32,7 +32,7 @@ def function(tool_id: str):
 def catalogue(phase: str | None = None) -> list[dict]:
     return [{"id": k, "phase": v["phase"], "question": v["question"], "target_types": v.get("target_types", []),
              "needs": v.get("needs", []), "params": {p: spec.get("description", "") for p, spec in v.get("params", {}).items()},
-             "caveats": v.get("caveats", [])}
+             "cost_class": v.get("cost_class", "low"), "caveats": v.get("caveats", [])}
             for k, v in load().items() if phase in (None, v["phase"])]
 
 
@@ -135,13 +135,22 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
 
     by = params.get("by")
     if by and by in cols:
-        levels = [lv for lv in cols[by].get("levels", []) if lv["count"] >= min_n]
+        shown_levels = cols[by].get("levels", [])
+        levels = [lv for lv in shown_levels if lv["count"] >= min_n]
         if "levels" not in cols[by]:
-            reasons.append(f"'{by}' has too many levels to segment by")
+            if "max_levels" in tool.get("params", {}):
+                cap = min(10, int(params.get("max_levels", tool["params"]["max_levels"].get("default", 10))))
+                warnings.append(f"'{by}' has {cols[by]['n_unique']} levels; the {cap} most frequent will be kept and the rest combined as Other")
+            else:
+                reasons.append(f"'{by}' has too many levels to segment by")
         elif len(levels) < 2:
             reasons.append(f"'{by}' has fewer than 2 levels with n >= {min_n}")
-        elif len(levels) < len(cols[by]["levels"]):
-            warnings.append(f"{len(cols[by]['levels']) - len(levels)} level(s) of '{by}' have n < {min_n} and will be skipped")
+        elif len(levels) < len(shown_levels):
+            warnings.append(f"{len(shown_levels) - len(levels)} level(s) of '{by}' have n < {min_n} and will be skipped")
+        max_spec = tool.get("params", {}).get("max_levels")
+        if "levels" in cols[by] and max_spec and cols[by]["n_unique"] > min(10, int(params.get("max_levels", max_spec.get("default", 10)))):
+            cap = min(10, int(params.get("max_levels", max_spec.get("default", 10))))
+            warnings.append(f"only the {cap} most frequent '{by}' levels will be shown separately; all others become Other")
 
     n_target = round(profile["n_rows"] * (1 - cols.get(target["column"], {}).get("missing_pct", 100) / 100))
     if n_target < min_n:

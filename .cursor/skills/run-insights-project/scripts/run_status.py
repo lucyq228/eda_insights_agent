@@ -9,22 +9,22 @@ from insight_core.runner import base_parser, configure_stdout, emit_json, resolv
 from insight_core.state import milestone_status, next_step, read_artifact  # noqa: E402
 
 ROUTE = {
-    "profile": "A4: profile_data.py",
-    "scope_draft": "A2: draft the scope (read_context.py, save_scope.py)",
-    "feasibility": "A3: check_feasibility.py, then save_feasibility.py",
-    "approval": "Manager: show the scope + feasibility to the user, collect answers, approve only on explicit yes",
-    "data_quality": "A4: data_quality.py",
-    "prepared_data": "A5: prepare_data.py",
-    "analyses": "A6: run_plan.py",
-    "review": "A7: review_checks.py, then save_review.py",
-    "insights": "A7: save_insights.py",
-    "report": "A7: build_report.py",
+    "profile": "Coordinator: profile_data.py",
+    "scope_draft": "Scope & Feasibility specialist: read_context.py, save_scope.py",
+    "feasibility": "Scope & Feasibility specialist: check_feasibility.py, save_feasibility.py",
+    "approval": "Coordinator: show scope + feasibility to the user and approve only on explicit yes",
+    "data_quality": "Coordinator: advance_run.py (deterministic)",
+    "prepared_data": "Coordinator: advance_run.py (deterministic)",
+    "analyses": "Coordinator: advance_run.py (approved selected plan only)",
+    "review": "Reviewer & Insights specialist: review_checks.py, save_review.py",
+    "insights": "Reviewer & Insights specialist: save_insights.py",
+    "report": "Reviewer & Insights specialist: build_report.py",
 }
 
 
 def main() -> None:
     configure_stdout()
-    args = base_parser(__doc__, "manager").parse_args()
+    args = base_parser(__doc__, "coordinator").parse_args()
     run_dir = resolve(args)
     run = read_artifact(run_dir, "run.json")
     rows = milestone_status(run_dir)
@@ -43,10 +43,10 @@ def main() -> None:
             out["blocked_steps"] = [s["step_id"] for s in feas["steps"] if s["final_verdict"] == "blocked"]
     review = read_artifact(run_dir, "review.json")
     if review and review.get("rerun_requests") and out["milestones"]["review"].startswith("incomplete"):
-        out["reruns_for_A6"] = review["rerun_requests"]
-        out["next"] = {"milestone": "review", "route": "A6: run each rerun with run_tool.py --followup-reason, then A7 re-reviews"}
+        out["targeted_followups"] = review["rerun_requests"]
+        out["next"] = {"milestone": "review", "route": "Coordinator runs each follow-up with run_tool.py, then reviewer rechecks"}
     if nxt is None:
-        out["next"] = {"milestone": "done", "route": "Manager: finalize_run.py, then present report.html"}
+        out["next"] = {"milestone": "done", "route": "Coordinator: finalize_run.py, then present report.html"}
     emit_json(out)
 
 

@@ -13,7 +13,7 @@ from insight_core.state import milestone_done, write_artifact  # noqa: E402
 
 def main() -> None:
     configure_stdout()
-    p = base_parser(__doc__, "A7")
+    p = base_parser(__doc__, "review-insights")
     p.add_argument("--file", help="default: drafts/insights.json")
     args = p.parse_args()
     run_dir = resolve(args)
@@ -25,7 +25,7 @@ def main() -> None:
         emit_json({"error": "insights draft has problems", "issues": errs}, ok=False)
     write_artifact(run_dir, "insights.json", draft, upstream="review.json")
     events.emit(run_dir, "insights", args.actor, f"{len(draft['insights'])} insights")
-    emit_json({"insights": [f"{i['id']}: {i['title']}" for i in draft["insights"]], "next": "A7 build_report.py"})
+    emit_json({"insights": [f"{i['id']}: {i['title']}" for i in draft["insights"]], "next": "build_report.py"})
 
 
 if __name__ == "__main__":

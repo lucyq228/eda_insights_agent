@@ -1,14 +1,18 @@
 ---
 name: feasibility
-description: Check whether the data supports each pathway step of the scope proposal (columns exist, types fit the tool, enough rows and segment levels, a usable date, no leakage), add analyst judgment, and save a feasibility review that says what the data can and cannot answer. Use for the feasibility milestone (A3 Feasibility), after every scope revision.
+description: Check whether the data supports each selectively planned pathway step (columns exist, types fit the tool, enough rows and segment levels, a usable date, no leakage), add analyst judgment, and save what the data can and cannot answer. Use for the feasibility milestone after every scope revision.
 ---
 
-# Feasibility (A3)
+# Feasibility (Scope & Feasibility specialist)
 
 ```powershell
 .venv\Scripts\python.exe .cursor\skills\feasibility\scripts\check_feasibility.py
 .venv\Scripts\python.exe .cursor\skills\feasibility\scripts\save_feasibility.py --file runs\<run>\drafts\feasibility.json
 ```
+
+`check_feasibility.py` persists its deterministic result for the current scope
+version. `save_feasibility.py` reuses that result; it must not reload the dataset
+or repeat leakage calculations. A revised scope makes the saved check stale.
 
 ## What the deterministic check covers
 

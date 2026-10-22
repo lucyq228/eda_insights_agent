@@ -1,4 +1,4 @@
-"""Deterministic challenges for A7, and validation of the review and insight drafts."""
+"""Deterministic challenges and validation for review and insight drafts."""
 
 from __future__ import annotations
 
@@ -7,9 +7,9 @@ import re
 from pathlib import Path
 
 from . import registry
-from .state import read_artifact
+from .state import read_artifact, sha
 
-VERDICTS = ("supported", "partially_supported", "not_supported", "inconclusive")
+VERDICTS = ("supported", "partially_supported", "not_supported", "inconclusive", "not_evaluated")
 STRENGTHS = ("strong", "moderate", "weak", "null")
 CONFIDENCE = ("high", "medium", "low")
 CAUSAL = re.compile(r"\b(cause[sd]?|causing|drives?|driving|driven by|impacts?|impacted|effect of|leads? to|"
@@ -31,6 +31,9 @@ def challenges(run_dir: Path) -> dict:
     q = {(r["result"], r["label"]): r["q"] for r in results.get("multiple-testing", {}).get("q_values", [])}
     ent = scope.get("entity_column")
     panel = set(registry.panel_tools())
+    waiver_artifact = read_artifact(run_dir, "step_waivers.json") or {}
+    waivers = ({w["step_id"]: w for w in waiver_artifact.get("waivers", [])}
+               if (waiver_artifact.get("upstream") or {}).get("sha256") == sha(run_dir / "approved_scope.json") else {})
     per_result = []
     for label, r in sorted(results.items()):
         if label == "multiple-testing":
@@ -64,7 +67,10 @@ def challenges(run_dir: Path) -> dict:
     by_h = {}
     for h in scope["hypotheses"]:
         by_h[h["id"]] = {"statement": h["statement"], "support_criteria": h["support_criteria"],
-                         "results": [x["result"] for x in per_result if x["hypothesis"] == h["id"]]}
+                         "results": [x["result"] for x in per_result if x["hypothesis"] == h["id"]],
+                         "skipped_steps": [{"step_id": s["step_id"], "reason": waivers[s["step_id"]]["reason"]}
+                                           for s in registry.plan_steps(scope)
+                                           if s["hypothesis"] == h["id"] and s["step_id"] in waivers]}
     prompts = ["Does the pooled result survive within segments? Lead with within-segment when they differ.",
                "Is a weak correlation hiding a curve (nonlinearity flags)?",
                "Do overlapping drivers tell one story or two (collinear pairs)?",
@@ -100,6 +106,11 @@ def validate_review(draft: dict, run_dir: Path) -> list[str]:
     results = load_results(run_dir)
     errs = []
     ids = {h["id"] for h in scope["hypotheses"]}
+    waiver_artifact = read_artifact(run_dir, "step_waivers.json") or {}
+    waivers = ({w["step_id"] for w in waiver_artifact.get("waivers", [])}
+               if (waiver_artifact.get("upstream") or {}).get("sha256") == sha(run_dir / "approved_scope.json") else set())
+    hypothesis_steps = {h["id"]: {s["step_id"] for s in registry.plan_steps(scope) if s["hypothesis"] == h["id"]}
+                        for h in scope["hypotheses"]}
     seen = set()
     for v in draft.get("hypothesis_verdicts", []):
         where = f"verdict {v.get('id')}"
@@ -110,7 +121,13 @@ def validate_review(draft: dict, run_dir: Path) -> list[str]:
             errs.append(f"{where}: verdict must be one of {VERDICTS}")
         if not v.get("reasoning"):
             errs.append(f"{where}: needs reasoning")
-        errs += _check_evidence(v.get("evidence", []), results, where) + _causal(v.get("reasoning"), where)
+        all_skipped = bool(hypothesis_steps.get(v.get("id"))) and hypothesis_steps[v.get("id")].issubset(waivers)
+        if v.get("verdict") == "not_evaluated":
+            if not all_skipped:
+                errs.append(f"{where}: not_evaluated is allowed only when all of the hypothesis's steps were user-approved skips")
+        else:
+            errs += _check_evidence(v.get("evidence", []), results, where)
+        errs += _causal(v.get("reasoning"), where)
     if ids - seen:
         errs.append(f"missing verdicts for {sorted(ids - seen)}")
     for i, c in enumerate(draft.get("challenges", []), 1):
@@ -129,8 +146,8 @@ def validate_insights(draft: dict, run_dir: Path) -> list[str]:
         errs.append("needs 'headline_summary'")
     errs += _causal(draft.get("headline_summary"), "headline_summary")
     items = draft.get("insights", [])
-    if not 2 <= len(items) <= 7:
-        errs.append("give 2 to 7 insights; pick the ones that matter for the decision")
+    if not 4 <= len(items) <= 10:
+        errs.append("give 4 to 10 distinct, evidence-backed insights; do not split or pad findings to reach the range")
     for ins in items:
         where = f"insight {ins.get('id')}"
         for key in ("id", "title", "statement", "strength", "confidence"):
@@ -143,6 +160,11 @@ def validate_insights(draft: dict, run_dir: Path) -> list[str]:
         errs += _check_evidence(ins.get("evidence", []), results, where)
         if any(not ev.get("finding") for ev in ins.get("evidence", [])):
             errs.append(f"{where}: every evidence item needs a 'finding' label so the report can quote n and CI")
+        for ev in ins.get("evidence", []):
+            result = results.get(ev.get("result"), {})
+            finding = next((f for f in result.get("findings", []) if f.get("label") == ev.get("finding")), {})
+            if str(finding.get("interval_status", "")).startswith("screening_point_estimate"):
+                errs.append(f"{where}: '{ev.get('finding')}' is screening-only; run a selected deep dive for a report-grade interval")
         for key in ("title", "statement"):
             errs += _causal(ins.get(key), f"{where} {key}")
     for key in ("limitations", "next_steps"):

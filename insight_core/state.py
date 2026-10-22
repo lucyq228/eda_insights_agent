@@ -8,16 +8,16 @@ from pathlib import Path
 
 # name, artifact, owner, upstream artifact whose hash the artifact must carry
 MILESTONES = [
-    ("profile", "profile.json", "A4 Data Quality & EDA", None),
-    ("scope_draft", "scope_proposal.json", "A2 Scope", None),
-    ("feasibility", "feasibility.json", "A3 Feasibility", "scope_proposal.json"),
-    ("approval", "approved_scope.json", "Manager + user", None),
-    ("data_quality", "data_quality.json", "A4 Data Quality & EDA", "approved_scope.json"),
-    ("prepared_data", "prepared_data.json", "A5 Data Prep", "approved_scope.json"),
-    ("analyses", "analyses_index.json", "A6 Analysis", "prepared_data.json"),
-    ("review", "review.json", "A7 Review & Insights", "analyses_index.json"),
-    ("insights", "insights.json", "A7 Review & Insights", "review.json"),
-    ("report", "report.json", "A7 Review & Insights", "insights.json"),
+    ("profile", "profile.json", "Coordinator (deterministic)", None),
+    ("scope_draft", "scope_proposal.json", "Scope & Feasibility specialist", None),
+    ("feasibility", "feasibility.json", "Scope & Feasibility specialist", "scope_proposal.json"),
+    ("approval", "approved_scope.json", "Coordinator + user", None),
+    ("data_quality", "data_quality.json", "Coordinator (deterministic)", "approved_scope.json"),
+    ("prepared_data", "prepared_data.json", "Coordinator (deterministic)", "approved_scope.json"),
+    ("analyses", "analyses_index.json", "Coordinator (deterministic selected plan)", "prepared_data.json"),
+    ("review", "review.json", "Reviewer & Insights specialist", "analyses_index.json"),
+    ("insights", "insights.json", "Reviewer & Insights specialist", "review.json"),
+    ("report", "report.json", "Reviewer & Insights specialist", "insights.json"),
 ]
 
 

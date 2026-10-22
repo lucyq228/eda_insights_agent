@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+import time
 import traceback
 from datetime import datetime
 from pathlib import Path
@@ -16,7 +17,7 @@ from . import events, registry
 from .context import Ctx
 from .paths import refuse, run_dir_for
 from .scope import load_approved
-from .state import read_artifact, write_artifact
+from .state import read_artifact, sha, write_artifact
 
 
 def configure_stdout() -> None:
@@ -74,7 +75,7 @@ def load_raw(run_dir: Path) -> pd.DataFrame:
 def load_prepared(run_dir: Path) -> tuple[pd.DataFrame, dict]:
     meta = read_artifact(run_dir, "prepared_data.json")
     if not meta:
-        refuse("no prepared dataset yet; run A5 prepare_data.py first")
+        refuse("no prepared dataset yet; run prepare_data.py first")
     return pd.read_parquet(run_dir / "datasets" / "prepared.parquet"), meta
 
 
@@ -130,13 +131,28 @@ def execute(run_dir: Path, tool_id: str, params: dict, label: str, actor: str, s
     ctx = Ctx(run_dir=run_dir, df=df, types=types, scope=scope, label=label, drivers=drivers)
     run_meta = {"step_id": (step or {}).get("step_id"), "hypothesis": (step or {}).get("hypothesis"),
                 "purpose": (step or {}).get("purpose"), "followup_reason": followup_reason}
+    events.emit(run_dir, "tool start", actor, f"{label} {tool_id}",
+                {"label": label, "tool": tool_id, "n_rows": len(df)})
+    started = time.perf_counter()
     try:
         out = registry.function(tool_id)(ctx, params)
     except Exception as exc:
         out = {"error": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc(limit=3), "findings": []}
+    elapsed = round(time.perf_counter() - started, 3)
+    run_meta["runtime_seconds"] = elapsed
     record = save_result(run_dir, label, tool_id, params, out, run_meta)
-    events.emit(run_dir, "tool", actor, f"{label} {tool_id}: {record.get('summary') or record.get('error')}")
+    events.emit(run_dir, "tool complete", actor,
+                f"{label} {tool_id} ({elapsed}s): {record.get('summary') or record.get('error')}",
+                {"label": label, "tool": tool_id, "runtime_seconds": elapsed, "n_rows": len(df),
+                 "ok": not bool(record.get("error"))})
     return record
+
+
+def waived_steps(run_dir: Path) -> dict[str, dict]:
+    artifact = read_artifact(run_dir, "step_waivers.json") or {}
+    if artifact and (artifact.get("upstream") or {}).get("sha256") != sha(run_dir / "approved_scope.json"):
+        return {}
+    return {item["step_id"]: item for item in artifact.get("waivers", [])}
 
 
 def write_analyses_index(run_dir: Path) -> dict:
@@ -146,12 +162,15 @@ def write_analyses_index(run_dir: Path) -> dict:
         r = json.loads(path.read_text(encoding="utf-8"))
         results[r["label"]] = r
     errors, steps = [], []
+    waivers = waived_steps(run_dir)
     for s in registry.plan_steps(scope):
         r = results.get(s["step_id"])
-        status = "missing" if r is None else "error" if r.get("error") else "done"
-        if status != "done":
+        waived = waivers.get(s["step_id"])
+        status = "skipped" if waived and r is None else "missing" if r is None else "error" if r.get("error") else "done"
+        if status not in ("done", "skipped"):
             errors.append(f"{s['step_id']} ({s['tool']}): {status}" + (f" - {r['error']}" if r and r.get("error") else ""))
-        steps.append({**s, "status": status, "summary": (r or {}).get("summary"), "flags": (r or {}).get("flags", [])})
+        steps.append({**s, "status": status, "summary": (r or {}).get("summary"), "flags": (r or {}).get("flags", []),
+                      "skip_reason": (waived or {}).get("reason")})
     followups = [{"label": k, "tool": r["tool"], "params": r["params"], "reason": r["followup_reason"],
                   "summary": r.get("summary"), "flags": r.get("flags", []), "error": r.get("error")}
                  for k, r in results.items() if r.get("followup_reason")]

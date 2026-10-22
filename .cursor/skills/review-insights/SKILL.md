@@ -1,9 +1,9 @@
 ---
 name: review-insights
-description: Challenge every analysis result, give each hypothesis a verdict, request targeted reruns, pick the 3-5 insights that matter for the decision, and build the Markdown and HTML report. Use for the review, insights, and report milestones (A7 Review & Insights).
+description: Challenge every analysis result, give each hypothesis a verdict, request targeted follow-ups, pick 4-10 distinct evidence-backed findings that matter for the decision, and build the Markdown and HTML report. Use for the review, insights, and report milestones.
 ---
 
-# Review, insights, report (A7)
+# Review, insights, report (Reviewer & Insights specialist)
 
 ```powershell
 .venv\Scripts\python.exe .cursor\skills\review-insights\scripts\review_checks.py
@@ -29,7 +29,7 @@ says which entities differ, not what moves inside one.
 
 ```json
 {
-  "hypothesis_verdicts": [{"id": "H2", "verdict": "supported | partially_supported | not_supported | inconclusive",
+  "hypothesis_verdicts": [{"id": "H2", "verdict": "supported | partially_supported | not_supported | inconclusive | not_evaluated",
                            "reasoning": "...", "evidence": [{"result": "H2.S1", "finding": "<finding label>"}]}],
   "challenges": [{"issue": "pooled promo r is negative", "resolution": "within-region r is positive; lead with it"}],
   "rerun_requests": [{"tool": "segment-correlation", "params": {"x": "staff_hours", "by": "store_format"},
@@ -39,7 +39,7 @@ says which entities differ, not what moves inside one.
 
 Judge against each hypothesis's `support_criteria`. Reruns are for questions the
 results raise, not for searching until something is significant. If you request
-reruns, the review stays open; after A6 runs them, review again.
+follow-ups, the review stays open; after the coordinator runs them, review again.
 
 ## 2. Insights (`drafts/insights.json`)
 
@@ -55,9 +55,14 @@ reruns, the review stays open; after A6 runs them, review again.
 }
 ```
 
-2-7 insights, ranked by what matters for the decision. Include a null or surprising
+4-10 distinct insights, ranked by what matters for the decision. Do not split or
+pad findings to meet the range. Include a null or surprising
 result when it changes what the user would do. Causal wording ("drives", "impact",
 "leads to", "because of", "effect of") is refused by the save script.
+
+Use `not_evaluated` only when every pathway step for that hypothesis has an
+explicit user-approved waiver. A skipped step is visible in the report lineage;
+it is not a failed result and it is not evidence.
 
 ## 3. Report
 

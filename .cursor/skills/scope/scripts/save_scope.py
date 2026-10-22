@@ -13,7 +13,7 @@ from insight_core.state import read_artifact, write_artifact  # noqa: E402
 
 def main() -> None:
     configure_stdout()
-    p = base_parser(__doc__, "A2")
+    p = base_parser(__doc__, "scope-feasibility")
     p.add_argument("--file", help="default: drafts/scope.json")
     p.add_argument("--change-note", default="", help="what changed versus the previous version")
     args = p.parse_args()
@@ -37,7 +37,7 @@ def main() -> None:
                 f"{len(draft['hypotheses'])} hypotheses; {len(draft.get('user_questions', []))} questions")
     emit_json({"version": version, "target": draft["target"]["column"], "hypotheses": [h["id"] for h in draft["hypotheses"]],
                "questions": [q["id"] for q in draft.get("user_questions", [])], "warnings": warnings,
-               "next": "A3 feasibility on this version"})
+               "next": "run feasibility on this version"})
 
 
 if __name__ == "__main__":

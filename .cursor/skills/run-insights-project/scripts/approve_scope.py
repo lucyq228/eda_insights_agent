@@ -12,7 +12,7 @@ from insight_core.scope import approve  # noqa: E402
 
 def main() -> None:
     configure_stdout()
-    p = base_parser(__doc__, "manager")
+    p = base_parser(__doc__, "coordinator")
     p.add_argument("--user-confirmation", required=True, help="the user's approval, quoted verbatim")
     args = p.parse_args()
     run_dir = resolve(args)
@@ -23,7 +23,7 @@ def main() -> None:
         emit_json({"error": str(exc)}, ok=False)
     events.emit(run_dir, "scope approved", args.actor, f"version {scope['version']}; user said: {args.user_confirmation[:200]}")
     emit_json({"approved_version": scope["version"], "target": scope["target"]["column"],
-               "hypotheses": [h["id"] for h in scope["hypotheses"]], "next": "A4 data_quality.py"})
+               "hypotheses": [h["id"] for h in scope["hypotheses"]], "next": "advance_run.py"})
 
 
 if __name__ == "__main__":

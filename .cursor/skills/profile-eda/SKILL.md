@@ -1,9 +1,9 @@
 ---
 name: profile-eda
-description: Profile any tabular dataset before scoping (column types, missingness, distributions, candidate targets, ids, dates, segments) and run data-quality checks and a target overview after the scope is approved (duplicates, key uniqueness, target balance, outliers, leakage). Use for the profile and data_quality milestones (A4 Data Quality & EDA).
+description: Deterministically profile any tabular dataset before scoping and run data-quality checks plus a target overview after approval. The post-approval check reuses the leakage screen saved during feasibility. Use for the profile and data_quality milestones.
 ---
 
-# Profile and data quality (A4)
+# Profile and data quality (deterministic pipeline)
 
 ```powershell
 .venv\Scripts\python.exe .cursor\skills\profile-eda\scripts\profile_data.py    # before scoping

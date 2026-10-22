@@ -13,7 +13,7 @@ from insight_core.state import milestone_done, write_artifact  # noqa: E402
 
 def main() -> None:
     configure_stdout()
-    p = base_parser(__doc__, "A7")
+    p = base_parser(__doc__, "review-insights")
     p.add_argument("--file", help="default: drafts/review.json")
     args = p.parse_args()
     run_dir = resolve(args)
@@ -31,7 +31,7 @@ def main() -> None:
     verdicts = {v["id"]: v["verdict"] for v in draft["hypothesis_verdicts"]}
     events.emit(run_dir, "review", args.actor, f"verdicts={verdicts}; reruns={len(reruns)}")
     emit_json({"verdicts": verdicts, "rerun_requests": reruns,
-               "next": "manager relays reruns to A6, then A7 reviews again" if reruns else "A7 save_insights.py"})
+               "next": "coordinator runs targeted follow-ups, then reviewer checks again" if reruns else "save_insights.py"})
 
 
 if __name__ == "__main__":
