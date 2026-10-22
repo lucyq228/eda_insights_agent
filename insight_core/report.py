@@ -25,6 +25,8 @@ def _fmt(v, digits=3):
 
 
 def evidence_line(f: dict, q) -> str:
+    if f.get("evidence_type") == "descriptive":
+        return f"{f['label']}: {_fmt(f.get('estimate'))}; observed n = {f.get('n')}; descriptive (no significance test)"
     ci = f"[{_fmt(f.get('ci_low'))}, {_fmt(f.get('ci_high'))}]" if f.get("ci_low") is not None else "(no CI)"
     ents = f", entities = {f['n_entities']}" if f.get("n_entities") and f.get("n_entities") != f.get("n") else ""
     return f"{f['label']}: {f['metric']} = {_fmt(f.get('estimate'))} {ci}, n = {f.get('n')}{ents}, q = {_fmt(q)}"
@@ -54,8 +56,8 @@ def build(run_dir: Path) -> dict:
           f"**Purpose:** {scope['purpose']}  ", f"**Decision supported:** {scope['decision_supported']}  ",
           f"**Target:** `{scope['target']['column']}` ({scope['target']['type']}) - {scope['target']['definition']}  ",
           f"**Data:** {prep.get('n_rows')} rows after preparation; unit = {scope['unit_of_analysis']}", "",
-          "> These are associations in observational data, not causes. Each estimate shows its n, 95% CI, "
-          "and q (Benjamini-Hochberg across every test in the run).", ""]
+          "> Descriptive findings and observational associations do not establish causes. Statistical estimates show available n, CI, "
+          "and q (Benjamini-Hochberg across recorded tests). Data-selected follow-ups remain exploratory.", ""]
     if panel_line(scope):
         md += [f"> {panel_line(scope)}", ""]
     md += ["## Summary", "", insights["headline_summary"], "", "## Key insights", ""]
@@ -78,6 +80,12 @@ def build(run_dir: Path) -> dict:
         md += [f"![{ins['id']}](charts/{Path(i).name})" for i in imgs] + [""]
         blocks.append((ins, ev_lines, imgs))
 
+    md += ["## Proposed business actions", ""]
+    for rec in insights.get("recommendations", []):
+        md += [f"### {rec['action']}", rec['rationale'],
+               f"Evidence: {rec['evidence_type']}", f"Validation: {rec['validation_plan']}",
+               f"Success metric: {rec['success_metric']}", f"Assumptions: {rec['assumptions']}",
+               f"Risks: {rec['risks']}", ""]
     md += ["## Hypothesis verdicts", "", "| Hypothesis | Verdict | Reasoning |", "|---|---|---|"]
     for v in review["hypothesis_verdicts"]:
         md.append(f"| {v['id']} | {v['verdict']} | {v['reasoning'].replace('|', '/')} |")
@@ -120,6 +128,10 @@ def _html(scope, insights, review, blocks, prep, dq, results, skipped) -> str:
                    for k, r in sorted(results.items()))
     runs += "".join(f"<li><code>{e(s['step_id'])}</code> {e(s['tool'])} (user-approved skip): "
                     f"{e(str(s.get('skip_reason')))}</li>" for s in skipped)
+    actions = "".join(f"<section class='card'><h3>{e(r['action'])}</h3><p>{e(r['rationale'])}</p>"
+                      f"<p>Evidence: {e(r['evidence_type'])}</p><p>Validation: {e(r['validation_plan'])}</p>"
+                      f"<p>Success metric: {e(r['success_metric'])}</p><p>Assumptions: {e(str(r['assumptions']))}</p>"
+                      f"<p>Risks: {e(str(r['risks']))}</p></section>" for r in insights.get("recommendations", []))
     t = scope["target"]
     panel_html = f'<p class="note">{e(panel_line(scope))}</p>' if panel_line(scope) else ""
     return f"""<!doctype html><html><head><meta charset="utf-8"><title>{e(scope['project_name'])}</title>
@@ -138,12 +150,12 @@ table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #d9e2ec;pad
 <p class="meta"><b>Purpose:</b> {e(scope['purpose'])}<br><b>Decision supported:</b> {e(scope['decision_supported'])}<br>
 <b>Target:</b> <code>{e(t['column'])}</code> ({e(t['type'])}) - {e(t['definition'])}<br>
 <b>Data:</b> {prep.get('n_rows')} rows after preparation; unit = {e(scope['unit_of_analysis'])}</p>
-<p class="note">These are associations in observational data, not causes. Each estimate shows its n, 95% CI, and q
-(Benjamini-Hochberg across every test in the run).</p>
+<p class="note">Descriptive findings and observational associations do not establish causes. Statistical estimates show available n, CI, and q
+(Benjamini-Hochberg across recorded tests). Data-selected follow-ups remain exploratory.</p>
 {panel_html}
 <h2>Summary</h2><p>{e(insights['headline_summary'])}</p>
 <h2>Key insights</h2>{''.join(cards)}
-<h2>Hypothesis verdicts</h2><table><tr><th>Hypothesis</th><th>Verdict</th><th>Reasoning</th></tr>{verdicts}</table>
+<h2>Proposed business actions</h2>{actions}<h2>Hypothesis verdicts</h2><table><tr><th>Hypothesis</th><th>Verdict</th><th>Reasoning</th></tr>{verdicts}</table>
 <h2>Limitations</h2><ul>{lims}</ul><h2>Recommended next steps</h2><ul>{nexts}</ul>
 <h2>Appendix</h2><p>Data quality: {e(str(dq.get('summary', 'n/a')))}</p>
 <ul>{''.join(f'<li>{e(x)}</li>' for x in prep.get('log', []))}</ul><h3>Analyses run</h3><ul>{runs}</ul>

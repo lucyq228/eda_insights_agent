@@ -61,7 +61,13 @@ def challenges(run_dir: Path) -> dict:
                 issues.append("negligible size (|est| < 0.1)")
             rows.append({"finding": f["label"], "metric": f["metric"], "estimate": f.get("estimate"),
                          "ci": [f.get("ci_low"), f.get("ci_high")], "n": f.get("n"), "q": qv, "issues": issues})
-        per_result.append({"result": label, "tool": r["tool"], "hypothesis": r.get("hypothesis"),
+        descriptive = bool(r.get("findings")) and all(f.get("evidence_type") == "descriptive" for f in r["findings"])
+        finding_count = len(rows)
+        if descriptive:
+            rows = rows[:30]
+        per_result.append({"finding_count": finding_count, "preview_truncated": descriptive and finding_count > 30,
+                           "evidence_access": "Use read_evidence.py for bounded/sorted aggregate table pages",
+                           "result": label, "tool": r["tool"], "hypothesis": r.get("hypothesis"),
                            "followup": r.get("followup_reason"), "summary": r.get("summary"), "flags": items,
                            "findings": rows})
     by_h = {}
@@ -71,7 +77,9 @@ def challenges(run_dir: Path) -> dict:
                          "skipped_steps": [{"step_id": s["step_id"], "reason": waivers[s["step_id"]]["reason"]}
                                            for s in registry.plan_steps(scope)
                                            if s["hypothesis"] == h["id"] and s["step_id"] in waivers]}
-    prompts = ["Does the pooled result survive within segments? Lead with within-segment when they differ.",
+    prompts = ["Have customer counts, frequency, quantity, mix and temporal changes been checked or explicitly marked unavailable?",
+               "Does each claim state its aggregation, denominator, population and observational limits?",
+               "Read aggregate result tables; a null trend is not evidence of no temporal patterns.","Does the pooled result survive within segments? Lead with within-segment when they differ.",
                "Is a weak correlation hiding a curve (nonlinearity flags)?",
                "Do overlapping drivers tell one story or two (collinear pairs)?",
                "Is anything that looks too good actually leakage or a derived column?",
@@ -146,8 +154,8 @@ def validate_insights(draft: dict, run_dir: Path) -> list[str]:
         errs.append("needs 'headline_summary'")
     errs += _causal(draft.get("headline_summary"), "headline_summary")
     items = draft.get("insights", [])
-    if not 4 <= len(items) <= 10:
-        errs.append("give 4 to 10 distinct, evidence-backed insights; do not split or pad findings to reach the range")
+    if not items and not draft.get("no_findings_reason"):
+        errs.append("provide supported insights or a no_findings_reason; never pad the report")
     for ins in items:
         where = f"insight {ins.get('id')}"
         for key in ("id", "title", "statement", "strength", "confidence"):
@@ -167,6 +175,13 @@ def validate_insights(draft: dict, run_dir: Path) -> list[str]:
                 errs.append(f"{where}: '{ev.get('finding')}' is screening-only; run a selected deep dive for a report-grade interval")
         for key in ("title", "statement"):
             errs += _causal(ins.get(key), f"{where} {key}")
+    for rec in draft.get("recommendations", []):
+        for key in ("action", "rationale", "validation_plan", "success_metric", "assumptions", "risks"):
+            if not rec.get(key):
+                errs.append(f"recommendation needs {key}")
+        errs += _check_evidence(rec.get("evidence", []), results, "recommendation")
+        if rec.get("evidence_type") not in ("descriptive", "association", "experimental", "causal_design"):
+            errs.append("recommendation needs an explicit evidence_type")
     for key in ("limitations", "next_steps"):
         if not draft.get(key):
             errs.append(f"needs '{key}'")

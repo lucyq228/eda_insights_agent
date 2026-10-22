@@ -65,6 +65,14 @@ def step_columns(tool_id: str, params: dict, scope: dict, profile: dict) -> list
 
 def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: list[str]) -> dict:
     """Deterministic verdict for one step: ok | partial | blocked, with reasons."""
+    if params.get("view"):
+        from .views import view_scope_profile
+        try:
+            scope, profile = view_scope_profile(scope, profile, params["view"])
+            params = {k: v for k, v in params.items() if k != "view"}
+            leakage = []  # Raw column leakage does not describe derived metrics.
+        except (KeyError, ValueError) as exc:
+            return {"verdict": "blocked", "reasons": [str(exc)], "warnings": []}
     reasons, warnings = [], []
     try:
         tool = get(tool_id)
@@ -94,15 +102,17 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
             continue
         if c == target["column"]:
             reasons.append(f"'{c}' is the target; it cannot also be a driver")
-        if c in excluded:
+        if c in excluded and not tool.get("descriptive"):
             reasons.append(f"'{c}' is excluded in the scope")
-        if c in leakage:
+        if c in leakage and not tool.get("descriptive"):
             reasons.append(f"'{c}' looks like target leakage; add it to exclude or justify it")
-        if cols[c]["type"] not in USABLE_TYPES:
+        if cols[c]["type"] not in USABLE_TYPES and not tool.get("descriptive"):
             reasons.append(f"'{c}' is type '{cols[c]['type']}', not usable as a driver")
         elif cols[c]["missing_pct"] > 40:
             warnings.append(f"'{c}' is {cols[c]['missing_pct']}% missing")
 
+    if "drivers" in tool.get("params", {}) and not (params.get("drivers") or resolved_drivers(scope, profile)):
+        reasons.append("this tool needs at least one model driver")
     x = params.get("x")
     if "numeric_x" in tool.get("needs", []) and x in cols and cols[x]["type"] != "numeric":
         reasons.append(f"'{x}' must be numeric for {tool_id}")
@@ -139,7 +149,7 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
         levels = [lv for lv in shown_levels if lv["count"] >= min_n]
         if "levels" not in cols[by]:
             if "max_levels" in tool.get("params", {}):
-                cap = min(10, int(params.get("max_levels", tool["params"]["max_levels"].get("default", 10))))
+                cap = max(2, int(params.get("max_levels", tool["params"]["max_levels"].get("default", 10))))
                 warnings.append(f"'{by}' has {cols[by]['n_unique']} levels; the {cap} most frequent will be kept and the rest combined as Other")
             else:
                 reasons.append(f"'{by}' has too many levels to segment by")
@@ -148,8 +158,8 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
         elif len(levels) < len(shown_levels):
             warnings.append(f"{len(shown_levels) - len(levels)} level(s) of '{by}' have n < {min_n} and will be skipped")
         max_spec = tool.get("params", {}).get("max_levels")
-        if "levels" in cols[by] and max_spec and cols[by]["n_unique"] > min(10, int(params.get("max_levels", max_spec.get("default", 10)))):
-            cap = min(10, int(params.get("max_levels", max_spec.get("default", 10))))
+        if "levels" in cols[by] and max_spec and cols[by]["n_unique"] > max(2, int(params.get("max_levels", max_spec.get("default", 10)))):
+            cap = max(2, int(params.get("max_levels", max_spec.get("default", 10))))
             warnings.append(f"only the {cap} most frequent '{by}' levels will be shown separately; all others become Other")
 
     n_target = round(profile["n_rows"] * (1 - cols.get(target["column"], {}).get("missing_pct", 100) / 100))

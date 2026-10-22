@@ -73,7 +73,7 @@ def _cramers_v(a: np.ndarray, b: np.ndarray) -> float:
 
 
 def _round(d: dict) -> dict:
-    return {k: (round(float(v), 4) if isinstance(v, (float, np.floating)) and np.isfinite(v) else
+    return {k: (float(v) if isinstance(v, (float, np.floating)) and np.isfinite(v) else
                 (None if isinstance(v, (float, np.floating)) else v)) for k, v in d.items()}
 
 
@@ -157,7 +157,7 @@ def bh_qvalues(pvalues: list[float]) -> list[float]:
     q = np.minimum.accumulate(ranked[::-1])[::-1]
     out = np.empty(n)
     out[order] = np.clip(q, 0, 1)
-    return [round(float(v), 6) for v in out]
+    return [float(v) for v in out]
 
 
 def residualize(y: np.ndarray, X: np.ndarray) -> np.ndarray:

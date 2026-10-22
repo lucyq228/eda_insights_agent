@@ -8,13 +8,13 @@ from pathlib import Path
 
 # name, artifact, owner, upstream artifact whose hash the artifact must carry
 MILESTONES = [
-    ("profile", "profile.json", "Coordinator (deterministic)", None),
+    ("profile", "profile.json", "Analyst (deterministic)", None),
     ("scope_draft", "scope_proposal.json", "Scope & Feasibility specialist", None),
     ("feasibility", "feasibility.json", "Scope & Feasibility specialist", "scope_proposal.json"),
-    ("approval", "approved_scope.json", "Coordinator + user", None),
-    ("data_quality", "data_quality.json", "Coordinator (deterministic)", "approved_scope.json"),
-    ("prepared_data", "prepared_data.json", "Coordinator (deterministic)", "approved_scope.json"),
-    ("analyses", "analyses_index.json", "Coordinator (deterministic selected plan)", "prepared_data.json"),
+    ("approval", "approved_scope.json", "Analyst activation (explicit approval for confirmatory mode)", None),
+    ("data_quality", "data_quality.json", "Analyst (deterministic)", "approved_scope.json"),
+    ("prepared_data", "prepared_data.json", "Analyst (deterministic)", "approved_scope.json"),
+    ("analyses", "analyses_index.json", "Analyst (selected plan and follow-ups)", "prepared_data.json"),
     ("review", "review.json", "Reviewer & Insights specialist", "analyses_index.json"),
     ("insights", "insights.json", "Reviewer & Insights specialist", "review.json"),
     ("report", "report.json", "Reviewer & Insights specialist", "insights.json"),

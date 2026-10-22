@@ -1,79 +1,67 @@
 # Architecture
 
-## Three layers
+## Three roles
 
-1. **Three logical roles.** The Coordinator is the main Cursor chat following
-   `run-insights-project/SKILL.md`. Two Markdown specialists in `.cursor/agents/`
-   own scope/feasibility and review/insights. They decide and explain; they never
-   compute statistics.
-2. **Skills (scripts).** Each agent task is a skill with small CLI scripts that
-   validate inputs, call the shelf, and save artifacts. Every script prints JSON
-   with `ok` and exits non-zero on refusal.
-3. **Shelf (`insight_core/` + `tool_registry.yaml`).** Deterministic, typed tools.
-   The registry remains broad. The scope is a selective manifest, so only tools
-   needed for approved hypotheses run. Feasibility checks the same manifest.
+1. Scoping agent: business objective, source grain, keys, metrics, assumptions, views and initial plan.
+2. Analyst agent (main chat): deterministic execution, aggregate evidence inspection, bounded follow-ups.
+3. Reviewer agent: independent correctness/coverage checks and evidence-backed recommendations.
 
-This boundary removes agent hand-offs from profiling, quality checks, preparation,
-and planned execution without reducing analytical flexibility. Judgment stays in
-the three roles; repeatable computation stays in the pipeline.
+The shared calculation library is insight_core/, exposed through tool_registry.yaml and CLI skills.
+No extra coordinator agent is needed. The main chat handles coordination as part of the analyst role.
 
-## A run is a folder of artifacts
+## Activation and adaptation
 
-```text
-runs/<id>/
-  run.json              dataset path, SHA-256, the user's request
-  profile.json          deterministic, before scoping
-  answers.json          what the user said (coordinator)
-  scope_proposal.json   scope/feasibility specialist, versioned
-  feasibility_auto.json saved deterministic check for the current proposal
-  feasibility.json      specialist judgment, carries the scope's SHA-256
-  approved_scope.json   locked; scope.lock.json holds its SHA-256 and the data's
-  data_quality.json     deterministic; reuses feasibility leakage screen
-  prepared_data.json    deterministic (+ datasets/prepared.parquet)
-  step_waivers.json     explicit user-approved skipped steps, if any
-  results/*.json        deterministic, one per selected step or follow-up (+ CSV tables)
-  analyses_index.json   plan coverage, follow-ups, multiple testing
-  cache/associations.json repeated association results for this prepared dataset
-  review.json           reviewer verdicts (open while follow-ups are pending)
-  insights.json         reviewer
-  report.md / .html     reviewer
-  live_run.log          human-readable timeline (scripts + hooks)
-```
+Scopes use mode exploratory or confirmatory (legacy default). A feasible exploratory scope can
+activate with approve_scope.py --exploration under the recorded original request. Its authorization
+is user_requested_exploration and user_confirmation is empty. Confirmatory scopes still require a
+real approval quote. Substantive unanswered questions block either path. Never infer approval of
+external actions or a genuinely different objective from exploratory authorization.
 
-## Staleness
+The active scope stays hashed and immutable. It declares roles, views, initial questions, exclusions
+and max_followups (default 12). Additional registered calculations use --followup-reason; their
+parameters, view, grain and mode are saved. New results invalidate review/report as before.
+A new objective or dataset requires a new run. Do not redefine the scope to chase significance.
 
-Each downstream artifact stores the SHA-256 of the artifact it was built from.
-If the upstream changes, `run_status.py` reports the downstream one as **stale**,
-and the next step is to redo it:
+## Data and metrics
 
-```text
-scope_proposal -> feasibility        approved_scope -> data_quality, prepared_data
-prepared_data -> analyses_index -> review -> insights -> report
-```
+Preparation preserves all columns and categories after exact deduplication, target validity and date
+parsing. Predictive exclusions do not delete accounting components. Roles may name customer,
+transaction (a composite key list), quantity, product and store. Distinct customer/transaction counts
+are nonadditive across product groups. Metrics use complete required keys/components and report
+excluded rows. Customer spending/frequency covers the observed window, not individual exposure time.
 
-Examples: a scope revision invalidates the saved feasibility check, so approval is
-refused until the specialist rechecks; a follow-up changes the index, so review is redone.
+Named views contain group_by, metrics {output: {column, agg}}, optional ratios
+{output: {numerator, denominator}}, target, drivers, unit, and optional date_column/freq/entity_column.
+Allowed aggregations: sum, mean, median, min, max, nunique, count, size. Ratios use existing metrics;
+zero denominators produce missing values. No eval or arbitrary code. Views are derived from the base
+at execution time and feasibility/sample size are checked at the resulting grain. Include composite
+transaction keys when counting visits; nunique of a locally scoped transaction ID alone is insufficient.
+Check segment stability before calling customer-by-segment rows unique customers.
 
-## Gates
+## Evidence
 
-| Gate | Enforced by |
-|---|---|
-| Scope is valid (target exists, binary has a positive class, tools exist) | `save_scope.py` |
-| Feasibility auto-check runs once per scope version; judgment can only be stricter | `check_feasibility.py`, `save_feasibility.py` |
-| No approval with stale feasibility, blocked steps, leakage drivers, or unanswered questions | `approve_scope.py` |
-| Panel data needs a decision: `entity_column` plus a panel tool, or a `panel_reason` | `feasibility.panel_issues` (scope issue) |
-| No analysis without a locked, untampered scope and unchanged data file | every downstream script |
-| Every tool call re-checked against the scope; follow-ups need a reason | `runner.execute` |
-| Concurrent duplicate milestones are refused; completed milestones are reused | `.locks/`, milestone checks |
-| A skipped planned step needs the user's quoted confirmation and remains visible | `skip_step.py`, `step_waivers.json` |
-| Verdicts and insights cite existing findings; causal wording refused | `save_review.py`, `save_insights.py` |
+Result JSON stores statistical/descriptive findings and a 30-row aggregate table preview. Full tables
+are paginated by insight-shelf/scripts/read_evidence.py (up to 200 rows). Agents may inspect aggregates,
+not raw personal records. Reports distinguish descriptive accounting from statistical evidence.
+Recommendations carry action, rationale, evidence links, evidence_type, assumptions, risks,
+success_metric and validation_plan. No minimum count; empty insight reports need no_findings_reason.
 
-## Performance policy
+## Statistical safeguards
 
-- Broad leakage/ranking screens use point estimates only.
-- Vectorized eta replaces repeated Python scans over category levels.
-- Report-grade intervals are computed only for selected results and cached.
-- High-cardinality deep dives show the 10 most frequent levels plus `Other`;
-  frequency selection occurs without looking at the target.
-- `advance_run.py` runs quality, preparation, and the approved analysis manifest
-  directly, so no agent rereads a playbook merely to launch a deterministic script.
+P-values retain precision until display. Category display caps do not change association estimates.
+Rank-deficient adjusted coefficients are suppressed. With an explicit entity, adjusted OLS uses
+clustered covariance and predictive holdout uses entities. Ordinary correlation tools still require
+independence; warnings make that limitation visible. Panel tools remain available. High association
+alone is a review warning, not proof of leakage; derived/name-based suspects remain blocked unless
+excluded or given a documented leakage_justifications entry addressing timing and provenance.
+
+Exploration does not become confirmatory simply because BH adjustment was applied. Repeated tests,
+data-selected follow-ups and dependent observations require careful interpretation.
+
+## Validation
+
+Run python -m pytest tests -q. Tests include legacy end-to-end flows and business regressions:
+frequency differences with identical purchase amounts, temporal volume changes with flat average
+amounts, accounting reconciliation, preserved identifiers, view grain, aggregate evidence access,
+category display invariance, p-value precision, and suppression of unidentified coefficients.
+The QVI example plan is a manual integration benchmark; keep source data and artifacts out of git.

@@ -46,7 +46,7 @@ def leakage_suspects(df: pd.DataFrame, scope: dict, types: dict[str, str], thres
         if c in rebuilt and (name_hit or not partner_hit):
             why.append(f"the target is almost exactly a product/ratio of {c} and {rebuilt[c]}")
         if why:
-            out.append({"column": c, "reason": "; ".join(why)})
+            out.append({"column": c, "reason": "; ".join(why), "blocking": bool(name_hit or c in rebuilt)})
     return out
 
 
@@ -145,9 +145,9 @@ def data_quality_check(ctx: Ctx, params: dict, precomputed_leakage: list[dict] |
             add(f"cardinality: {c}", "warn", f"{df[c].nunique()} levels; rare levels will be grouped as 'Other'")
     leaks = precomputed_leakage if precomputed_leakage is not None else leakage_suspects(df, scope, ctx.types)
     for lk in leaks:
-        used = lk["column"] in ctx.drivers
+        used = lk["column"] in ctx.drivers and lk.get("blocking", True) and not scope.get("leakage_justifications", {}).get(lk["column"])
         add(f"leakage: {lk['column']}", "fail" if used else "pass",
-            lk["reason"] + ("; still used as a driver" if used else "; already excluded"))
+            lk["reason"] + ("; still used as a driver" if used else "; excluded, justified, or association-only warning"))
     if scope.get("date_column"):
         d = pd.to_datetime(df[scope["date_column"]], errors="coerce")
         add("date parse", "warn" if d.isna().mean() > .01 else "pass",
@@ -197,31 +197,15 @@ def prepare_dataset(ctx: Ctx, params: dict) -> dict:
     log.append(f"dropped {before - len(df)} rows without a target")
     if ctx.target_type == "binary":
         log.append(f"target coded 1 = '{scope['target']['positive_class']}', 0 = other")
-    keep = [ctx.target] + ctx.drivers
+    # Preserve the clean base. Model exclusions are not data deletion rules.
     date = scope.get("date_column")
     if date:
         df[date] = pd.to_datetime(df[date], errors="coerce")
-        keep.append(date)
-    for key in ("id_column", "entity_column"):
-        if scope.get(key):
-            keep.append(scope[key])
-    dropped = [c for c in df.columns if c not in keep]
-    df = df[list(dict.fromkeys(keep))]
-    log.append(f"kept target + {len(ctx.drivers)} drivers; dropped {len(dropped)} columns: {dropped}")
-    types = {ctx.target: ctx.target_type}
-    for c in ctx.drivers:
-        t = ctx.types[c]
-        types[c] = t
-        if t in ("categorical", "binary"):
-            s = df[c].astype("string").fillna("Missing")
-            share = s.value_counts(normalize=True)
-            rare = share[share < rare_share].index
-            if len(rare):
-                s = s.where(~s.isin(rare), "Other")
-                log.append(f"{c}: grouped {len(rare)} rare levels as 'Other'")
-            df[c] = s.astype(str)
-        else:
-            df[c] = pd.to_numeric(df[c], errors="coerce")
+    types = dict(ctx.types)
+    types[ctx.target] = ctx.target_type
+    log.append("preserved all columns and original categories; model exclusions apply only to predictors")
+    if rare_share != .01:
+        log.append("rare_level_share ignored: category pooling belongs in an explicit model view")
     path = ctx.run_dir / "datasets" / "prepared.parquet"
     df.to_parquet(path, index=False)
     return {"summary": f"{len(df)} rows x {df.shape[1]} columns ready", "n_rows": int(len(df)), "columns": types,

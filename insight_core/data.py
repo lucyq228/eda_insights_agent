@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 
 MAX_LEVELS_SHOWN = 30
-ID_HINT = re.compile(r"(^id$|_id$|^id_|uuid|guid|key$|number$|^name$|email|phone)", re.I)
+ID_HINT = re.compile(r"(^id$|_id$|^id_|uuid|guid|key$|number$|_nbr$|^name$|email|phone)", re.I)
 DATE_HINT = re.compile(r"(date|time|week|month|day|period|_at$|timestamp)", re.I)
 
 
@@ -50,12 +50,14 @@ def infer_type(s: pd.Series, name: str = "") -> str:
     n_unique = non_null.nunique()
     if n_unique <= 1:
         return "constant"
+    if n_unique >= 2 and ID_HINT.search(name):
+        return "id"
     if n_unique == 2:
         return "binary"
     if _as_datetime(s) is not None:
         return "datetime"
     if pd.api.types.is_numeric_dtype(s):
-        if ID_HINT.search(name) and n_unique > .9 * len(non_null):
+        if ID_HINT.search(name) and n_unique > 2:
             return "id"
         return "numeric"
     if n_unique > .9 * len(non_null) and len(non_null) > 50:
@@ -103,7 +105,10 @@ def profile(df: pd.DataFrame) -> dict:
             "date_columns": [c for c, t in types.items() if t == "datetime"],
             "segment_candidates": [c for c, t in types.items() if t in ("categorical", "binary")
                                    and 2 <= df[c].nunique() <= 15],
-            "panel_candidates": panel_candidates(df, types)}
+            "panel_candidates": panel_candidates(df, types),
+            "repeated_entities": [{"column": c, "n_entities": int(df[c].nunique()),
+                                   "rows_per_entity": round(len(df) / df[c].nunique(), 2)}
+                                  for c, t in types.items() if t == "id" and 1 < df[c].nunique() < len(df)]}
 
 
 def panel_candidates(df: pd.DataFrame, types: dict[str, str]) -> list[dict]:

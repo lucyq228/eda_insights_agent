@@ -40,8 +40,8 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
         errors.append("entity_column cannot be the target")
     drivers = scope.get("drivers", "all")
     if drivers != "all":
-        if not isinstance(drivers, list) or not drivers:
-            errors.append("drivers must be 'all' or a non-empty list of columns")
+        if not isinstance(drivers, list):
+            errors.append("drivers must be 'all' or a list of columns (empty is valid for descriptive plans)")
         else:
             errors += [f"driver '{c}' is not in the dataset" for c in drivers if c not in cols]
     for e in scope.get("exclude", []):
@@ -51,6 +51,8 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
         if c not in cols:
             errors.append(f"segment '{c}' is not in the dataset")
 
+    if not isinstance(scope["hypotheses"], list):
+        return ["hypotheses must be a list of meaningful questions"], warnings
     ids = [h.get("id") for h in scope["hypotheses"]]
     if len(ids) != len(set(ids)):
         errors.append("hypothesis ids must be unique")
@@ -64,17 +66,19 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
                 errors.append(f"{h.get('id')}: unknown tool '{step.get('tool')}'")
             elif not step.get("purpose"):
                 errors.append(f"{h.get('id')}: step '{step['tool']}' needs a purpose")
-    n_hypotheses = len(scope["hypotheses"])
-    if n_hypotheses > 10:
-        errors.append("use no more than 10 hypotheses; merge overlapping questions and keep only decision-relevant tests")
-    elif n_hypotheses < 4:
-        exception = str(scope.get("hypothesis_count_exception") or "").strip()
-        if not exception:
-            errors.append("use 4 to 10 hypotheses, or add hypothesis_count_exception explaining why fewer meaningful tests exist")
-        else:
-            warnings.append(f"only {n_hypotheses} hypotheses by explicit exception: {exception}")
-    elif n_hypotheses > 8:
-        warnings.append("9-10 hypotheses is allowed, but confirm each one changes the decision and is not shelf-coverage padding")
+    if scope.get("mode", "confirmatory") not in ("exploratory", "confirmatory"):
+        errors.append("mode must be exploratory or confirmatory")
+    roles = scope.get("roles", {})
+    for role, value in roles.items():
+        values = value if isinstance(value, list) else [value]
+        errors += [f"role {role}: unknown column {c}" for c in values if c not in cols]
+    if not isinstance(scope.get("max_followups", 12), int) or scope.get("max_followups", 12) < 0:
+        errors.append("max_followups must be a nonnegative integer")
+    for c, reason in scope.get("leakage_justifications", {}).items():
+        if c not in cols or not isinstance(reason, str) or not reason.strip():
+            errors.append(f"leakage justification for {c} needs a known column and provenance/timing rationale")
+    from .views import validate_views
+    errors += validate_views(scope, profile)
     qids = [q.get("id") for q in scope.get("user_questions", [])]
     if len(qids) != len(set(qids)):
         errors.append("user question ids must be unique")
@@ -84,8 +88,8 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
     return errors, warnings
 
 
-def approve(run_dir: Path, confirmation: str) -> dict:
-    if not confirmation or len(confirmation.strip()) < 2:
+def approve(run_dir: Path, confirmation: str = "", *, exploration: bool = False) -> dict:
+    if not exploration and (not confirmation or len(confirmation.strip()) < 2):
         raise ValueError("quote the user's explicit approval in --user-confirmation")
     if (run_dir / "approved_scope.json").exists():
         raise ValueError("this run already has an approved scope; a different scope needs a new run")
@@ -93,6 +97,13 @@ def approve(run_dir: Path, confirmation: str) -> dict:
     feas = read_artifact(run_dir, "feasibility.json")
     if not proposal:
         raise ValueError("no scope proposal")
+    if exploration:
+        if proposal["scope"].get("mode") != "exploratory":
+            raise ValueError("automatic activation is only for exploratory scopes")
+        if not (read_artifact(run_dir, "run.json") or {}).get("request"):
+            raise ValueError("exploration needs the original user request")
+        confirmation = ""  # Never manufacture a user approval quote.
+
     if not feas or (feas.get("upstream") or {}).get("sha256") != sha(run_dir / "scope_proposal.json"):
         raise ValueError("feasibility is missing or stale; rerun feasibility on the current scope")
     blocked = [s["step_id"] for s in feas["steps"] if s["final_verdict"] == "blocked"]
@@ -105,6 +116,7 @@ def approve(run_dir: Path, confirmation: str) -> dict:
     if open_q:
         raise ValueError(f"unanswered user questions: {open_q}")
     approved = {**proposal["scope"], "version": proposal["version"], "answers": answers,
+                "authorization": "user_requested_exploration" if exploration else "explicit_confirmation",
                 "approved_at": datetime.now().isoformat(timespec="seconds"), "user_confirmation": confirmation.strip()}
     write_artifact(run_dir, "approved_scope.json", approved)
     lock = {"sha256": sha(run_dir / "approved_scope.json"), "data_sha256": read_artifact(run_dir, "run.json")["data_sha256"]}
@@ -115,7 +127,7 @@ def approve(run_dir: Path, confirmation: str) -> dict:
 def load_approved(run_dir: Path) -> dict:
     lock = read_artifact(run_dir, "scope.lock.json")
     if not lock:
-        refuse("no approved scope yet; the user must approve the scope first")
+        refuse("no active scope; activate exploration or obtain confirmatory approval first")
     if lock["sha256"] != sha(run_dir / "approved_scope.json"):
         refuse("approved_scope.json changed after approval; refusing to run (start a new run)")
     run = read_artifact(run_dir, "run.json")

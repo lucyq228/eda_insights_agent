@@ -23,12 +23,10 @@ def auto_check(run_dir: Path) -> dict:
     df = load_table(read_artifact(run_dir, "run.json")["data_path"])
     types = {c["name"]: c["type"] for c in prof["columns"]}
     leaks = leakage_suspects(df, scope, types)
-    leak_cols = [x["column"] for x in leaks if x["column"] not in {e["column"] for e in scope.get("exclude", [])}]
+    leak_cols = [x["column"] for x in leaks if x.get("blocking", True) and not scope.get("leakage_justifications", {}).get(x["column"]) and x["column"] not in {e["column"] for e in scope.get("exclude", [])}]
     steps = registry.check_scope(scope, prof, leak_cols)
     drivers = registry.resolved_drivers(scope, prof)
     scope_issues = []
-    if not drivers:
-        scope_issues.append("no usable drivers after exclusions")
     for c in leak_cols:
         if c in drivers:
             scope_issues.append(f"'{c}' would be a driver but looks like leakage: {next(x['reason'] for x in leaks if x['column'] == c)}")
@@ -74,10 +72,7 @@ def panel_issues(scope: dict, profile: dict) -> list[str]:
     """Panel data needs an explicit decision: an entity_column with a panel tool, or a panel_reason."""
     ent = scope.get("entity_column")
     if ent:
-        planned = {s["tool"] for h in scope.get("hypotheses", []) for s in h.get("pathway", [])}
-        if not planned & set(registry.panel_tools()):
-            return [f"entity_column '{ent}' is set but no panel tool ({', '.join(registry.panel_tools())}) is in the plan"]
-        return []
+        return []  # Entity identity is useful without requiring a panel regression.
     found = profile.get("panel_candidates", [])
     if found and not scope.get("panel_reason"):
         p = found[0]
