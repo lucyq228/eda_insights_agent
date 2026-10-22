@@ -33,7 +33,7 @@ def main() -> None:
            "duplicate_rows": prof["duplicate_rows"], "columns": cols, "target_candidates": prof["target_candidates"],
            "id_columns": prof["id_columns"], "date_columns": prof["date_columns"],
            "segment_candidates": prof["segment_candidates"],
-           "panel_candidates": prof.get("panel_candidates", []), "profile_flags": prof["flags"]}
+           "panel_candidates": prof.get("panel_candidates", []), "repeated_entities": prof.get("repeated_entities", []), "profile_flags": prof["flags"]}
     answers = read_artifact(run_dir, "answers.json")
     if answers:
         out["user_answers"] = answers["answers"]

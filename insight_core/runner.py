@@ -83,7 +83,7 @@ def leakage_columns(run_dir: Path) -> list[str]:
     for name in ("data_quality.json", "feasibility.json"):
         art = read_artifact(run_dir, name)
         if art and "leakage_suspects" in art:
-            return [x["column"] for x in art["leakage_suspects"]]
+            return [x["column"] for x in art["leakage_suspects"] if x.get("blocking", True) and not (read_artifact(run_dir, "approved_scope.json") or {}).get("leakage_justifications", {}).get(x["column"])]
     return []
 
 
@@ -97,7 +97,9 @@ def save_result(run_dir: Path, label: str, tool_id: str, params: dict, out: dict
         if isinstance(table, pd.DataFrame) and not table.empty:
             path = run_dir / "results" / f"{label}__{name}.csv"
             table.to_csv(path, index=False)
-            tables[name] = {"file": path.name, "rows": int(len(table)), "columns": [str(c) for c in table.columns]}
+            tables[name] = {"file": path.name, "rows": int(len(table)), "columns": [str(c) for c in table.columns],
+                            "preview": json.loads(table.head(30).to_json(orient="records", date_format="iso")),
+                            "preview_truncated": len(table) > 30}
     record = {"label": label, "tool": tool_id, "params": params, **meta, "saved_at": datetime.now().isoformat(timespec="seconds"),
               **_jsonable(out), "tables": tables}
     (run_dir / "results" / f"{label}.json").write_text(json.dumps(record, indent=1, default=_default), encoding="utf-8")
@@ -118,6 +120,11 @@ def execute(run_dir: Path, tool_id: str, params: dict, label: str, actor: str, s
     scope = load_approved(run_dir)
     if step is None and not followup_reason and tool_id != "multiple-testing":
         refuse("analyses outside the approved plan need --followup-reason")
+    if followup_reason:
+        existing = [json.loads(p.read_text()) for p in (run_dir / "results").glob("*.json")]
+        count = sum(bool(r.get("followup_reason")) for r in existing if r.get("label") != label)
+        if count >= int(scope.get("max_followups", 12)):
+            refuse("follow-up budget reached; summarize unresolved questions and agree a new run if needed")
     df, meta = load_prepared(run_dir)
     profile = read_artifact(run_dir, "profile.json")
     if tool_id != "multiple-testing":
@@ -127,15 +134,37 @@ def execute(run_dir: Path, tool_id: str, params: dict, label: str, actor: str, s
             return {"label": label, "tool": tool_id, "error": "blocked by feasibility", "reasons": check["reasons"],
                     "summary": None, "flags": []}
     types = meta["columns"]
+    if params.get("view"):
+        from .views import build_view, view_scope_profile
+        from .data import column_types, profile as describe
+        name = params["view"]
+        df = build_view(df, scope, name)
+        scope, profile = view_scope_profile(scope, profile, name)
+        types = column_types(df)
+        for c in scope.get("drivers", []):
+            types[c] = next(x["type"] for x in profile["columns"] if x["name"] == c)
+        actual_profile = describe(df)
+        for info in actual_profile["columns"]:
+            info["type"] = types.get(info["name"], info["type"])
+        checked = registry.check_step(tool_id, {k:v for k,v in params.items() if k != "view"}, scope, actual_profile, [])
+        if checked["verdict"] == "blocked":
+            refuse("view fails actual-grain feasibility: " + str(checked["reasons"]))
+        if len(df) < int(scope.get("min_n", 30)):
+            refuse(f"view {name} has only {len(df)} rows; below min_n")
     drivers = [c for c in registry.resolved_drivers(scope, profile) if c in df.columns]
     ctx = Ctx(run_dir=run_dir, df=df, types=types, scope=scope, label=label, drivers=drivers)
     run_meta = {"step_id": (step or {}).get("step_id"), "hypothesis": (step or {}).get("hypothesis"),
-                "purpose": (step or {}).get("purpose"), "followup_reason": followup_reason}
+                "purpose": (step or {}).get("purpose"), "followup_reason": followup_reason,
+                "view": params.get("view"), "unit_of_analysis": scope["unit_of_analysis"],
+                "analysis_mode": scope.get("mode", "confirmatory")}
     events.emit(run_dir, "tool start", actor, f"{label} {tool_id}",
                 {"label": label, "tool": tool_id, "n_rows": len(df)})
     started = time.perf_counter()
     try:
         out = registry.function(tool_id)(ctx, params)
+        repeated_key = ctx.entity or scope.get("roles", {}).get("customer")
+        if repeated_key in df.columns and df[repeated_key].duplicated().any() and tool_id not in registry.panel_tools() and not registry.get(tool_id).get("descriptive"):
+            out.setdefault("flags", []).append("REPEATED ENTITIES: ordinary intervals assume independent rows; do not claim cluster-valid precision")
     except Exception as exc:
         out = {"error": f"{type(exc).__name__}: {exc}", "trace": traceback.format_exc(limit=3), "findings": []}
     elapsed = round(time.perf_counter() - started, 3)

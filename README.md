@@ -1,104 +1,49 @@
-# Insights agents: correlation analysis on any table, scoped with you
+# Business insights agents
 
-A demo of a small Cursor agent team that turns "can you find insights in this
-data?" into a reviewed, honest report. It works on any tabular file, and the
-user stays in charge of what gets analysed.
+Three agents — **scoping, analyst, reviewer** — investigate business questions with a shared,
+reproducible calculation library. The main chat is the analyst, which delegates scope design
+and independent review. The workflow supports exploratory discovery and prespecified analysis.
 
-## Why scoping first
+## What changed
 
-Most "find me insights" requests fail in one of four ways: no clear outcome,
-testing every column until something looks significant, reading correlations as
-causes, or columns that quietly leak the answer. The agents are built around
-those failure modes:
+- Preserve IDs, quantity and original categories in the clean base; exclusions affect modeling only.
+- Business summaries decompose sales into customer count, frequency, units and average price.
+- Segment intersections and temporal diagnostics expose patterns hidden by marginal correlations.
+- Named aggregate views support customer or store-period analysis with explicit metric definitions.
+- Agents can read bounded aggregate evidence; no raw personal rows are printed.
+- Exploratory runs activate from the user request after feasibility. Routine follow-ups need reasons,
+  not repeated approval. Confirmatory scopes retain explicit confirmation.
+- No required number of hypotheses or insights. Recommendations need evidence, assumptions,
+  risks, a success metric and a validation plan.
 
-- the coordinator asks **what outcome matters and what decision it informs** before any analysis;
-- hypotheses are written and approved **before** results exist, and every test joins one
-  **multiple-testing** family (Benjamini-Hochberg);
-- feasibility **blocks leakage** (columns derived from the target) and under-powered cuts;
-- review checks **Simpson's paradox**, curves hidden by weak correlations, and overlapping drivers;
-- the save scripts **refuse causal wording**.
+## Setup
 
-## Quick start
-
-```powershell
+```sh
 python -m venv .venv
-.venv\Scripts\python.exe -m pip install -r requirements.txt
-.venv\Scripts\python.exe scripts\make_sample_data.py      # two demo datasets
-.venv\Scripts\python.exe -m pytest tests -q              # full flow on both
+# Activate the environment using the command appropriate for your shell.
+python -m pip install -r requirements.txt
+python -m pytest tests -q
 ```
 
-Then open this folder in Cursor and say, for example:
+In Cursor ask `/run-insights-project` to investigate a dataset and business question.
+See [the architecture](docs/architecture.md) and [QVI example scope](examples/qvi_scope.json).
+The example is a schema/plan only; customer data and run outputs are never committed.
 
-> Use /run-insights-project on `data/store_weekly_sales.csv`. Can you help me find what moves with sales?
+## Tools
 
-or bring your own file:
+The existing association, nonlinearity, prediction and panel tools remain available.
+New tools are `business-summary`, `temporal-diagnostics`, and `period-comparison`.
+Statistical tools accept `view` to run on a declared aggregation rather than source lines.
+`read_evidence.py` reads result tables in bounded pages. Descriptive metrics are evidence
+without fabricated confidence intervals. Category caps affect display only.
 
-> Use /run-insights-project on `C:\path\to\my_data.xlsx`. What correlates with churn?
+## Limits
 
-The Cursor coordinator profiles the file, asks you for the target and purpose, shows you a
-plan with feasibility verdicts, waits for your yes, then runs everything and
-returns `runs/<run>/report.html`.
+EDA identifies patterns and opportunity hypotheses, not guaranteed sales lift. Average unit
+price includes mix; customer frequency reflects the observation window. Missing dates do not
+prove closure. Temporal anomaly flags use a simple robust baseline, not a seasonal forecast.
+Ordinary correlation methods retain independence assumptions; panel tools and clustered model
+coefficients are available for appropriate questions. Data-selected follow-ups remain exploratory.
 
-## The team
-
-| Step | Role | What it does |
-|---|---|---|
-| coordinate | Coordinator (main Cursor chat) | talks to you, asks questions, approves only on your yes |
-| profile | Deterministic pipeline | column types, missingness, candidate targets, flags |
-| scope + feasibility | Scope & Feasibility specialist | 4-10 hypotheses, a selective shelf-tool manifest, leakage/power/type checks |
-| quality + prepare | Deterministic pipeline | quality gates and one clean analysis table |
-| analyse | Deterministic pipeline | runs only the approved selected steps; reuses completed results |
-| review + report | Reviewer & Insights specialist | verdicts, targeted follow-ups, 4-10 findings, HTML report |
-
-The shelf is deliberately broader than any one run. Tool selection stays adaptive:
-the specialist chooses the smallest credible pathway for the approved scope, and
-`run_plan.py` executes that manifest rather than every tool.
-
-## The tool shelf (`tool_registry.yaml`)
-
-| Tool | Answers |
-|---|---|
-| profile-dataset, data-quality-check, eda-overview | what is in the table; is it fit for the scope |
-| prepare-dataset | the analysis table |
-| target-associations | rank all scoped drivers by a fast point estimate; add CI to selected top results |
-| correlation-matrix | which drivers overlap each other |
-| pair-deep-dive | the shape of one relationship |
-| segment-breakdown | does the target differ by segment |
-| segment-correlation | does an association hold within segments (Simpson's paradox) |
-| partial-correlation | does it survive holding other columns fixed |
-| nonlinearity-check | is it curved or threshold-like |
-| time-trend | trend over time and lagged driver correlation |
-| driver-importance | joint predictive importance and adjusted coefficients |
-| panel-decomposition | panel data: pooled vs within-entity vs between-entity association for one driver |
-| panel-drivers | panel data: which drivers move with the target within entities over time, and between them |
-| multiple-testing | q-values across every test (automatic) |
-| build-report | Markdown + self-contained HTML report |
-
-Measures adapt to column types: Spearman r for numeric drivers (a binary target is
-coded 1/0), eta for categorical drivers, Cramer's V or eta for a categorical target.
-High-cardinality reporting keeps the 10 most frequent levels and combines the rest
-as `Other`; levels are never selected by their target outcome.
-
-## Demo datasets
-
-- `data/store_weekly_sales.csv`: 80 stores x 26 weeks, target `weekly_sales_k`.
-  Planted: a strong traffic association, promo spend that looks negative pooled but is
-  positive within every region, an inverted-U for price, a negative stockout
-  association, staffing that matters mostly in malls, a null (temperature), a leakage
-  column, duplicates, and missing ratings.
-- `data/employee_attrition.csv`: 1,600 employees, binary target `left_company`.
-  Planted: engagement (protective), overtime (risk), early-tenure risk, a null
-  (remote), and a leakage column (`exit_interview_done`).
-
-The planted truth lives in `synthetic/`, which the agents never open.
-
-## Layout
-
-```text
-.cursor/agents/      two specialist roles     .cursor/skills/   coordinator playbook + deterministic tasks
-.cursor/rules/       guardrails (always on)   .cursor/hooks/    run log for subagent activity
-insight_core/        shared Python            tool_registry.yaml  the shelf
-data/ examples/ scripts/ tests/               runs/             one folder per run (gitignored)
-```
-
-See `docs/architecture.md` for how artifacts, staleness, and the lock fit together.
+Run artifacts are hashed and stored under runs/ (gitignored). No external service is required
+for calculation; Cursor hosts the agent reasoning. Legacy confirmatory scopes remain supported.

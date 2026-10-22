@@ -87,19 +87,10 @@ PROFILE = {"n_rows": 100, "columns": [
 ]}
 
 
-def test_hypothesis_policy_is_flexible_within_four_to_ten():
-    errors, warnings = scope_module.validate(_scope(4), PROFILE)
-    assert errors == [] and warnings == []
-
-    errors, _ = scope_module.validate(_scope(11), PROFILE)
-    assert any("no more than 10" in issue for issue in errors)
-
-    three = _scope(3)
-    errors, _ = scope_module.validate(three, PROFILE)
-    assert any("4 to 10" in issue for issue in errors)
-    three["hypothesis_count_exception"] = "Only three distinct decision-relevant tests exist."
-    errors, warnings = scope_module.validate(three, PROFILE)
-    assert errors == [] and any("explicit exception" in warning for warning in warnings)
+def test_hypothesis_count_is_not_a_quality_proxy():
+    for count in (1, 3, 4, 11):
+        errors, warnings = scope_module.validate(_scope(count), PROFILE)
+        assert errors == [] and warnings == []
 
 
 def test_user_waived_step_is_skipped_not_failed(tmp_path):

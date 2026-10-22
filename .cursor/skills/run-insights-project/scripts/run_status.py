@@ -9,13 +9,13 @@ from insight_core.runner import base_parser, configure_stdout, emit_json, resolv
 from insight_core.state import milestone_status, next_step, read_artifact  # noqa: E402
 
 ROUTE = {
-    "profile": "Coordinator: profile_data.py",
+    "profile": "Analyst: profile_data.py",
     "scope_draft": "Scope & Feasibility specialist: read_context.py, save_scope.py",
     "feasibility": "Scope & Feasibility specialist: check_feasibility.py, save_feasibility.py",
-    "approval": "Coordinator: show scope + feasibility to the user and approve only on explicit yes",
-    "data_quality": "Coordinator: advance_run.py (deterministic)",
-    "prepared_data": "Coordinator: advance_run.py (deterministic)",
-    "analyses": "Coordinator: advance_run.py (approved selected plan only)",
+    "approval": "Analyst: activate a feasible exploratory scope with --exploration; confirmatory scopes require explicit approval",
+    "data_quality": "Analyst: advance_run.py (deterministic)",
+    "prepared_data": "Analyst: advance_run.py (deterministic)",
+    "analyses": "Analyst: advance_run.py (approved selected plan only)",
     "review": "Reviewer & Insights specialist: review_checks.py, save_review.py",
     "insights": "Reviewer & Insights specialist: save_insights.py",
     "report": "Reviewer & Insights specialist: build_report.py",
@@ -44,9 +44,9 @@ def main() -> None:
     review = read_artifact(run_dir, "review.json")
     if review and review.get("rerun_requests") and out["milestones"]["review"].startswith("incomplete"):
         out["targeted_followups"] = review["rerun_requests"]
-        out["next"] = {"milestone": "review", "route": "Coordinator runs each follow-up with run_tool.py, then reviewer rechecks"}
+        out["next"] = {"milestone": "review", "route": "Analyst runs each follow-up with run_tool.py, then reviewer rechecks"}
     if nxt is None:
-        out["next"] = {"milestone": "done", "route": "Coordinator: finalize_run.py, then present report.html"}
+        out["next"] = {"milestone": "done", "route": "Analyst: finalize_run.py, then present report.html"}
     emit_json(out)
 
 

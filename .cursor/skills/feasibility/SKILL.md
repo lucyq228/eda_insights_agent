@@ -27,7 +27,7 @@ tool on panel data whose CIs treat repeated rows as independent), `blocked`.
 
 Scope-level: leakage suspects that would be drivers, no usable drivers, and panel
 data without a decision (the profile found a panel but the scope has neither
-`entity_column` nor `panel_reason`, or sets `entity_column` with no panel tool).
+`entity_column` nor `panel_reason`, entity identity alone does not require panel regression).
 
 ## Panel judgment
 

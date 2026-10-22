@@ -50,7 +50,7 @@ def _group_table(seg: pd.Series, y: pd.Series) -> pd.DataFrame:
 
 def group_top_levels(series: pd.Series, max_levels: int = 10, other_label: str = "Other") -> tuple[pd.Series, dict]:
     """Keep the most frequent levels and combine the rest without looking at the target."""
-    max_levels = max(2, min(10, int(max_levels)))
+    max_levels = max(2, int(max_levels))
     text = series.astype("string")
     counts = text.value_counts(dropna=True).rename_axis("level").reset_index(name="n")
     counts["sort_key"] = counts["level"].astype(str)
@@ -78,14 +78,15 @@ def target_associations(ctx: Ctx, params: dict) -> dict:
         # A broad screen needs ranking, not hundreds of resamples per column.
         res = associate_cached(ctx, c, _xtype(ctx, c), with_interval=False)
         findings.append(_finding(f"{c} ~ {ctx.target}", c, ctx.target, res, strength=stats.strength(res["estimate"])))
-    findings.sort(key=lambda f: -abs(f["estimate"] or 0))
+    metric_order = {"spearman_r": 0, "eta": 1, "cramers_v": 2}
+    findings.sort(key=lambda f: (metric_order.get(f["metric"], 3), -abs(f["estimate"] or 0)))
     ci_top = max(0, min(int(params.get("ci_top", 3)), len(findings)))
     intervals_computed = 0
     for i in range(ci_top):
         c = findings[i]["x"]
         if _xtype(ctx, c) == "categorical" and ctx.df[c].nunique(dropna=True) > 10:
             findings[i]["interval_status"] = "screening_point_estimate_high_cardinality"
-            findings[i]["report_grade_next_step"] = "pair-deep-dive (top 10 levels by frequency plus Other)"
+            findings[i]["report_grade_next_step"] = "pair-deep-dive (all levels tested; display may be capped)"
             continue
         res = associate_cached(ctx, c, _xtype(ctx, c), with_interval=True)
         findings[i] = _finding(f"{c} ~ {ctx.target}", c, ctx.target, res,
@@ -102,11 +103,11 @@ def target_associations(ctx: Ctx, params: dict) -> dict:
                            [f["ci_high"] if f["ci_high"] is not None else f["estimate"] for f in top],
                            f"Association with {ctx.target} (95% CI where report-grade)", "estimate", ctx.chart("ranked"))
     lead = ", ".join(f"{f['x']} {f['metric']}={f['estimate']}" for f in top[:3])
-    return {"summary": f"{len(findings)} drivers ranked; strongest: {lead}", "findings": findings,
+    return {"summary": f"{len(findings)} drivers screened by metric family (not a common importance scale): {lead}", "findings": findings,
             "tables": {"ranked": pd.DataFrame(findings)}, "charts": [chart],
             "notes": [f"report-grade intervals were computed for {intervals_computed} of the top {ci_top} ranked drivers; the rest are screening point estimates",
-                      "high-cardinality drivers need a selected deep dive using the 10 most frequent levels plus Other; ranking screens all levels",
-                      "eta and Cramer's V are unsigned (0 to 1); Spearman r is signed",
+                      "high-cardinality drivers need a selected deep dive for intervals; both screen and deep dive test all levels",
+                      "eta, Cramer's V and Spearman measure different relationships; compare ranks only within a metric family",
                       "these are one-at-a-time associations; overlapping drivers can share the same signal"]}
 
 
@@ -131,10 +132,10 @@ def pair_deep_dive(ctx: Ctx, params: dict) -> dict:
     if _xtype(ctx, x) == "categorical":
         x_values, grouping = group_top_levels(x_values, params.get("max_levels", 10))
     variant = f"top-{grouping['max_levels']}-by-frequency" if grouping and grouping["applied"] else "raw"
-    res = associate_cached(ctx, x, _xtype(ctx, x), with_interval=True, values=x_values, variant=variant)
+    res = associate_cached(ctx, x, _xtype(ctx, x), with_interval=True, values=ctx.df[x], variant="raw")
     f = _finding(f"{x} ~ {ctx.target}", x, ctx.target, res, strength=stats.strength(res["estimate"]))
     extra = ({"level_grouping": grouping,
-              "notes": ["high-cardinality levels were selected only by frequency, never by target outcome"]}
+              "notes": ["display only: levels selected by frequency; association uses all original levels"]}
              if grouping and grouping["applied"] else {})
     if ctx.target_type == "categorical":
         table = pd.crosstab(x_values if _xtype(ctx, x) == "categorical" else pd.qcut(x_values, 5, duplicates="drop"),
@@ -155,10 +156,10 @@ def segment_breakdown(ctx: Ctx, params: dict) -> dict:
     by = params["by"]
     segments, grouping = group_top_levels(ctx.df[by], params.get("max_levels", 10))
     variant = f"top-{grouping['max_levels']}-by-frequency" if grouping["applied"] else "raw"
-    res = associate_cached(ctx, by, "categorical", with_interval=True, values=segments, variant=variant)
+    res = associate_cached(ctx, by, "categorical", with_interval=True, values=ctx.df[by], variant="raw")
     f = _finding(f"{by} (segments) ~ {ctx.target}", by, ctx.target, res)
     extra = ({"level_grouping": grouping,
-              "notes": ["high-cardinality levels were selected only by frequency, never by target outcome"]}
+              "notes": ["display only: levels selected by frequency; association uses all original levels"]}
              if grouping["applied"] else {})
     if ctx.target_type == "categorical":
         table = pd.crosstab(segments, ctx.df[ctx.target], normalize="index").round(3).reset_index()
@@ -380,10 +381,14 @@ def driver_importance(ctx: Ctx, params: dict) -> dict:
         num = [c for c in drivers if ctx.types.get(c) == "numeric"]
         Xz[num] = (Xz[num] - Xz[num].mean()) / Xz[num].std()
         yz = (y - y.mean()) / y.std() if ctx.target_type == "numeric" else y
-        fit = sm.OLS(yz.to_numpy(float), sm.add_constant(Xz.to_numpy(float))).fit()
-        ci = fit.conf_int(ctx.alpha)
+        rank_ok = np.linalg.matrix_rank(sm.add_constant(Xz.to_numpy(float))) == sm.add_constant(Xz.to_numpy(float)).shape[1]
+        fit = None
+        if rank_ok:
+            ols = sm.OLS(yz.to_numpy(float), sm.add_constant(Xz.to_numpy(float)))
+            fit = ols.fit(cov_type="cluster", cov_kwds={"groups": d[ent]}) if ent and d[ent].nunique() >= 4 else ols.fit()
+            ci = fit.conf_int(ctx.alpha)
         for i, c in enumerate(Xz.columns, start=1):
-            if c not in num:
+            if c not in num or not rank_ok:
                 continue
             res = {"metric": "std_coef" if ctx.target_type == "numeric" else "lpm_coef_per_sd",
                    "estimate": round(float(fit.params[i]), 4), "ci_low": round(float(ci[i, 0]), 4),
@@ -392,6 +397,8 @@ def driver_importance(ctx: Ctx, params: dict) -> dict:
             findings.append(_finding(f"{c} ~ {ctx.target} | all drivers together", c, ctx.target, res))
             coef_rows.append(res | {"driver": c})
     flags = []
+    if ctx.target_type != "categorical" and not rank_ok:
+        flags.append("RANK DEFICIENT: adjusted coefficients suppressed; product attributes may encode the same information")
     if (ctx.target_type == "numeric" and base < .1) or (ctx.target_type == "binary" and base < .6):
         flags.append(f"WEAK MODEL: holdout {metric}={base:.3f}; the drivers explain little of the target")
     top = ", ".join(imp["driver"].head(3))

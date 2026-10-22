@@ -1,0 +1,132 @@
+{
+  "project_name": "Retail sales opportunities",
+  "mode": "exploratory",
+  "purpose": "Understand observed sales differences and identify hypotheses for business improvement.",
+  "decision_supported": "Prioritize customer, quantity, assortment and calendar opportunities for validation.",
+  "unit_of_analysis": "product purchase line; named views identify additional grains",
+  "target": {
+    "column": "TOT_SALES",
+    "type": "numeric",
+    "definition": "Recorded category sales; totals and per-customer metrics are descriptive, not causal lift."
+  },
+  "date_column": "DATE",
+  "drivers": [
+    "PACK_SIZE",
+    "LIFESTAGE",
+    "PREMIUM_CUSTOMER"
+  ],
+  "roles": {
+    "customer": "LYLTY_CARD_NBR",
+    "transaction": [
+      "STORE_NBR",
+      "TXN_ID"
+    ],
+    "quantity": "PROD_QTY",
+    "product": "PROD_NBR",
+    "store": "STORE_NBR"
+  },
+  "exclude": [
+    {
+      "column": "PROD_QTY",
+      "reason": "Accounting component retained for decomposition, excluded from predictive drivers."
+    }
+  ],
+  "panel_reason": "Transaction events are not a store-period panel; business summaries describe them. Customer view has one row per customer.",
+  "min_n": 30,
+  "max_followups": 12,
+  "user_questions": [],
+  "views": {
+    "customers": {
+      "group_by": [
+        "LYLTY_CARD_NBR",
+        "LIFESTAGE",
+        "PREMIUM_CUSTOMER"
+      ],
+      "metrics": {
+        "customer_sales": {
+          "column": "TOT_SALES",
+          "agg": "sum"
+        },
+        "purchase_lines": {
+          "column": "TXN_ID",
+          "agg": "size"
+        }
+      },
+      "target": "customer_sales",
+      "definition": "Total recorded sales per customer during the dataset window",
+      "unit": "customer within observed life-stage/tier; verify segment stability",
+      "drivers": [
+        "LIFESTAGE",
+        "PREMIUM_CUSTOMER"
+      ]
+    }
+  },
+  "hypotheses": [
+    {
+      "id": "H1",
+      "statement": "How do customer groups differ in sales, frequency, quantity and price?",
+      "rationale": "Separates different business mechanisms and denominators.",
+      "support_criteria": "Report observed magnitudes and coverage; flag uncertainty and distinguish exploratory associations from causal evidence.",
+      "pathway": [
+        {
+          "tool": "business-summary",
+          "params": {
+            "dimensions": [
+              "LIFESTAGE",
+              "PREMIUM_CUSTOMER"
+            ]
+          },
+          "purpose": "How do customer groups differ in sales, frequency, quantity and price?"
+        }
+      ]
+    },
+    {
+      "id": "H2",
+      "statement": "Which months show differences in revenue or quantities?",
+      "rationale": "Separates different business mechanisms and denominators.",
+      "support_criteria": "Report observed magnitudes and coverage; flag uncertainty and distinguish exploratory associations from causal evidence.",
+      "pathway": [
+        {
+          "tool": "temporal-diagnostics",
+          "params": {
+            "freq": "M"
+          },
+          "purpose": "Which months show differences in revenue or quantities?"
+        }
+      ]
+    },
+    {
+      "id": "H3",
+      "statement": "Which products and brands contribute to category sales?",
+      "rationale": "Separates different business mechanisms and denominators.",
+      "support_criteria": "Report observed magnitudes and coverage; flag uncertainty and distinguish exploratory associations from causal evidence.",
+      "pathway": [
+        {
+          "tool": "business-summary",
+          "params": {
+            "dimensions": [
+              "BRAND"
+            ]
+          },
+          "purpose": "Which products and brands contribute to category sales?"
+        }
+      ]
+    },
+    {
+      "id": "H4",
+      "statement": "How does observed annual customer spending differ by life stage?",
+      "rationale": "Separates different business mechanisms and denominators.",
+      "support_criteria": "Report observed magnitudes and coverage; flag uncertainty and distinguish exploratory associations from causal evidence.",
+      "pathway": [
+        {
+          "tool": "segment-breakdown",
+          "params": {
+            "view": "customers",
+            "by": "LIFESTAGE"
+          },
+          "purpose": "How does observed annual customer spending differ by life stage?"
+        }
+      ]
+    }
+  ]
+}

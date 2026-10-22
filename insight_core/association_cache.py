@@ -12,7 +12,7 @@ from . import stats
 from .context import Ctx
 from .state import sha
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2
 
 
 def associate_cached(ctx: Ctx, column: str, x_type: str, *, with_interval: bool,
@@ -30,6 +30,8 @@ def associate_cached(ctx: Ctx, column: str, x_type: str, *, with_interval: bool,
         "alpha": ctx.alpha,
         "with_interval": with_interval,
         "variant": variant,
+        "scope_view": ctx.scope.get("active_view"),
+        "data_digest": hashlib.sha256(pd.util.hash_pandas_object(ctx.df[[column, ctx.target]], index=True).values.tobytes()).hexdigest(),
     }
     key = hashlib.sha256(json.dumps(identity, sort_keys=True).encode("utf-8")).hexdigest()
     try:

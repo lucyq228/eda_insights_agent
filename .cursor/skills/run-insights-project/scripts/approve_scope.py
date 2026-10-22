@@ -13,11 +13,12 @@ from insight_core.scope import approve  # noqa: E402
 def main() -> None:
     configure_stdout()
     p = base_parser(__doc__, "coordinator")
-    p.add_argument("--user-confirmation", required=True, help="the user's approval, quoted verbatim")
+    p.add_argument("--exploration", action="store_true", help="activate a feasible exploratory scope under the original request")
+    p.add_argument("--user-confirmation", default="", help="the user's approval, quoted verbatim")
     args = p.parse_args()
     run_dir = resolve(args)
     try:
-        scope = approve(run_dir, args.user_confirmation)
+        scope = approve(run_dir, args.user_confirmation, exploration=args.exploration)
     except ValueError as exc:
         events.emit(run_dir, "approval refused", args.actor, str(exc))
         emit_json({"error": str(exc)}, ok=False)
