@@ -21,3 +21,12 @@ Use descriptive evidence without inventing p-values. Distinguish accounting cont
 predictive associations, and causal effects. Recommendations need an evidence link, action,
 assumptions, risks, success metric, and an experiment or other validation plan. No unsupported
 revenue forecast. Send all evidence and unresolved questions to the independent reviewer.
+
+Use business-reporting/SKILL.md before drafting actions. Compare candidate interventions and
+populations, including no change; explain the selection rather than targeting the highest-spend
+segment automatically. Follow-ups should resolve decisions, not merely add descriptive tables.
+Draft schema v2 recommendations using docs/business-report-schema.md. Differentiate investigate,
+pilot, implement and monitor. Include a specific intervention, audience, hypothesized mechanism,
+priority rationale, alternatives considered, dependencies, expected benefit and stop/expand rule.
+Do not fabricate uplift, owners, thresholds or operational capabilities. A test design is not an
+intervention. Send your proposed recommendations and supporting references to the reviewer.

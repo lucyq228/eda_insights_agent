@@ -128,5 +128,18 @@
         }
       ]
     }
-  ]
+  ],
+  "report_schema_version": 2,
+  "business_context": {
+    "audience": "Business decision maker (assumed)",
+    "decision": "Prioritize customer, quantity, assortment and calendar opportunities for validation.",
+    "available_levers": [],
+    "constraints": [],
+    "success_measures": [
+      "Recorded category sales; totals and per-customer metrics are descriptive, not causal lift."
+    ],
+    "unknowns": [
+      "Available interventions, budget, operational owners and business thresholds are not confirmed."
+    ]
+  }
 }

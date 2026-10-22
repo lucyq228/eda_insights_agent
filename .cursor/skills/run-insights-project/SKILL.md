@@ -23,3 +23,7 @@ independent review to a3-review-insights. These are three roles, not four.
 New objective/dataset or use of excluded predictors requires a new scope. Preserve all
 run provenance. Use run_status.py to resume. The legacy approved_scope filename now means
 an activated immutable scope; its authorization field distinguishes exploration from consent.
+
+New scopes use report_schema_version: 2. Analyst and reviewer both use business-reporting/SKILL.md.
+Finish only after the reviewer resolves business_review revisions and validates the v2 insight
+contract. Report generation preserves full evidence in detail while putting decisions first.

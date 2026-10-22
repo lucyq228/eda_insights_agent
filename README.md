@@ -47,3 +47,13 @@ coefficients are available for appropriate questions. Data-selected follow-ups r
 
 Run artifacts are hashed and stored under runs/ (gitignored). No external service is required
 for calculation; Cursor hosts the agent reasoning. Legacy confirmatory scopes remain supported.
+
+## Decision-ready business reports
+New scopes use report schema v2. The three agents capture decision context, compare concrete
+actions and independently review business usefulness using the repository's `business-reporting`
+skill. It adapts clarity and evidence-selection principles for HTML/Markdown reports, not slides.
+Reports lead with decisions and actions, retain important uncertainty, and put full evidence in
+expandable sections and a technical appendix. See [the schema](docs/business-report-schema.md).
+Legacy runs remain renderable without inventing missing recommendations. To test the revised
+reasoning, start a fresh Cursor Agent chat and fresh run; rebuilding an old report only changes
+presentation unless its insights are explicitly revised and reviewed.

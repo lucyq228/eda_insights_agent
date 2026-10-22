@@ -77,7 +77,10 @@ def challenges(run_dir: Path) -> dict:
                          "skipped_steps": [{"step_id": s["step_id"], "reason": waivers[s["step_id"]]["reason"]}
                                            for s in registry.plan_steps(scope)
                                            if s["hypothesis"] == h["id"] and s["step_id"] in waivers]}
-    prompts = ["Have customer counts, frequency, quantity, mix and temporal changes been checked or explicitly marked unavailable?",
+    prompts = ["Which concrete decision does each action enable, for whom, and why this option over alternatives?",
+               "Does each pilot name an intervention and stop/expand rule rather than only a test method?",
+               "Are expected benefits measured, assumed scenarios or explicitly unquantified?",
+               "Have customer counts, frequency, quantity, mix and temporal changes been checked or explicitly marked unavailable?",
                "Does each claim state its aggregation, denominator, population and observational limits?",
                "Read aggregate result tables; a null trend is not evidence of no temporal patterns.","Does the pooled result survive within segments? Lead with within-segment when they differ.",
                "Is a weak correlation hiding a curve (nonlinearity flags)?",
@@ -150,6 +153,15 @@ def validate_review(draft: dict, run_dir: Path) -> list[str]:
 def validate_insights(draft: dict, run_dir: Path) -> list[str]:
     results = load_results(run_dir)
     errs = []
+    scope = read_artifact(run_dir, "approved_scope.json") or {}
+    version = draft.get("schema_version", 1)
+    if version not in (1, 2):
+        errs.append("schema_version must be 1 or 2")
+    if scope.get("report_schema_version", 1) == 2 and version != 2:
+        errs.append("this scope requires schema_version: 2")
+    if version == 2:
+        from .report_contract import validate_v2
+        errs += validate_v2(draft, results, run_dir)
     if not draft.get("headline_summary"):
         errs.append("needs 'headline_summary'")
     errs += _causal(draft.get("headline_summary"), "headline_summary")
@@ -173,13 +185,17 @@ def validate_insights(draft: dict, run_dir: Path) -> list[str]:
             finding = next((f for f in result.get("findings", []) if f.get("label") == ev.get("finding")), {})
             if str(finding.get("interval_status", "")).startswith("screening_point_estimate"):
                 errs.append(f"{where}: '{ev.get('finding')}' is screening-only; run a selected deep dive for a report-grade interval")
-        for key in ("title", "statement"):
+        for key in ("title", "statement", "brief_summary"):
             errs += _causal(ins.get(key), f"{where} {key}")
     for rec in draft.get("recommendations", []):
         for key in ("action", "rationale", "validation_plan", "success_metric", "assumptions", "risks"):
             if not rec.get(key):
                 errs.append(f"recommendation needs {key}")
         errs += _check_evidence(rec.get("evidence", []), results, "recommendation")
+        # Factual rationale is screened; proposed mechanisms and test questions are separate
+        # fields and are judged by the independent reviewer rather than a keyword ban.
+        if version == 2:
+            errs += _causal(rec.get("rationale"), "recommendation rationale")
         if rec.get("evidence_type") not in ("descriptive", "association", "experimental", "causal_design"):
             errs.append("recommendation needs an explicit evidence_type")
     for key in ("limitations", "next_steps"):

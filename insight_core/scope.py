@@ -20,6 +20,20 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
             errors.append(f"missing '{key}'")
     if errors:
         return errors, warnings
+    version = scope.get("report_schema_version", 1)
+    if version not in (1, 2):
+        errors.append("report_schema_version must be 1 or 2")
+    if version == 2:
+        context = scope.get("business_context")
+        if not isinstance(context, dict):
+            errors.append("v2 scope needs business_context")
+        else:
+            for key in ("audience", "decision"):
+                if not isinstance(context.get(key), str) or not context[key].strip():
+                    errors.append(f"business_context needs {key}; explicit unknown is allowed")
+            for key in ("available_levers", "constraints", "success_measures", "unknowns"):
+                if not isinstance(context.get(key), list) or any(not isinstance(x, str) for x in context[key]):
+                    errors.append(f"business_context.{key} must be a list of strings")
     cols = {c["name"]: c for c in profile["columns"]}
     target = scope["target"]
     tc = target.get("column")
