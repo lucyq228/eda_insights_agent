@@ -1,0 +1,170 @@
+# The shared tool shelf. Agents pick tools from here; feasibility reads it.
+# phase: eda (before/after scoping), prepare (A5), analysis (A6 pathway steps), report (A7).
+# needs: numeric_x = the x param must be numeric; date = scope needs a date_column;
+#        entity = scope needs an entity_column (the unit observed repeatedly over time).
+# Param types: column, columns, int, float, str, bool.
+
+tools:
+  profile-dataset:
+    phase: eda
+    function: insight_core.tools_eda:profile_dataset
+    question: What is in this table? Column types, missingness, distributions, candidate targets, ids, dates, segments.
+    outputs: profile.json, histograms, missingness chart
+    caveats: [Types are inferred; the user confirms the target and its meaning.]
+
+  data-quality-check:
+    phase: eda
+    function: insight_core.tools_eda:data_quality_check
+    question: Is the data fit for the approved scope? Duplicates, key uniqueness, target missingness and balance, outliers, cardinality, leakage.
+    target_types: [numeric, binary, categorical]
+    outputs: data_quality.json
+    caveats: [Leakage detection is heuristic (very high association or a name that overlaps the target).]
+
+  eda-overview:
+    phase: eda
+    function: insight_core.tools_eda:eda_overview
+    question: What does the target look like overall and across the scoped segments?
+    target_types: [numeric, binary, categorical]
+    outputs: target distribution and segment charts
+
+  prepare-dataset:
+    phase: prepare
+    function: insight_core.tools_eda:prepare_dataset
+    question: Build the analysis table - dedupe, keep scoped columns, code the target, parse dates, group rare levels.
+    params:
+      rare_level_share: {type: float, default: 0.01, description: "levels rarer than this share become 'Other'"}
+    outputs: datasets/prepared.parquet, prepared_data.json
+
+  target-associations:
+    phase: analysis
+    function: insight_core.tools_analysis:target_associations
+    question: Which columns move with the target, and how strongly? One-at-a-time screen of every driver, ranked.
+    target_types: [numeric, binary, categorical]
+    params:
+      drivers: {type: columns, description: "subset of drivers (default: all scoped drivers)"}
+    method: Spearman r (numeric driver) with Fisher CI; eta with bootstrap CI (categorical driver); Cramer's V for categorical targets.
+    caveats: [Screening only - overlapping drivers share signal, and confounders are not removed.]
+
+  correlation-matrix:
+    phase: analysis
+    function: insight_core.tools_analysis:correlation_matrix
+    question: Which numeric drivers overlap with each other (collinearity) and with the target?
+    target_types: [numeric, binary, categorical]
+    params:
+      drivers: {type: columns, description: "subset of numeric drivers"}
+      threshold: {type: float, default: 0.8, description: "flag driver pairs with |r| at or above this"}
+    caveats: [Descriptive; no findings enter the multiple-testing family.]
+
+  pair-deep-dive:
+    phase: analysis
+    function: insight_core.tools_analysis:pair_deep_dive
+    question: What does the relationship between one driver and the target look like (binned means or group means)?
+    target_types: [numeric, binary, categorical]
+    params:
+      x: {type: column, required: true, description: "the driver"}
+      bins: {type: int, default: 10, description: "quantile bins for a numeric driver"}
+
+  segment-breakdown:
+    phase: analysis
+    function: insight_core.tools_analysis:segment_breakdown
+    question: Does the target level differ across segments (e.g. region, plan, department)?
+    target_types: [numeric, binary, categorical]
+    params:
+      by: {type: column, required: true, description: "segment column (2-15 levels)"}
+    caveats: [Levels with n < min_n are shown but flagged.]
+
+  segment-correlation:
+    phase: analysis
+    function: insight_core.tools_analysis:segment_correlation
+    question: Does a driver-target association hold within each segment, or is the pooled number an artefact of segment mix (Simpson's paradox)?
+    target_types: [numeric, binary]
+    needs: [numeric_x]
+    params:
+      x: {type: column, required: true, description: "numeric driver"}
+      by: {type: column, required: true, description: "segment column"}
+    method: Spearman r pooled, per level, and within-segment (partial on segment dummies); Cochran Q for heterogeneity.
+    caveats: [When pooled and within-segment disagree, lead with the within-segment result.]
+
+  partial-correlation:
+    phase: analysis
+    function: insight_core.tools_analysis:partial_correlation
+    question: Does the association survive after holding other columns fixed?
+    target_types: [numeric, binary]
+    needs: [numeric_x]
+    params:
+      x: {type: column, required: true, description: "numeric driver"}
+      controls: {type: columns, required: true, description: "columns to hold fixed"}
+    caveats: [Only removes confounding by the listed controls; unmeasured confounders remain.]
+
+  nonlinearity-check:
+    phase: analysis
+    function: insight_core.tools_analysis:nonlinearity_check
+    question: Is the relationship curved or threshold-like, so that a correlation coefficient understates it?
+    target_types: [numeric, binary]
+    needs: [numeric_x]
+    params:
+      x: {type: column, required: true, description: "numeric driver"}
+      bins: {type: int, default: 10, description: "quantile bins for the shape chart"}
+    method: Spearman vs Pearson, mutual information, quadratic term (dR^2 and p), binned means.
+
+  time-trend:
+    phase: analysis
+    function: insight_core.tools_analysis:time_trend
+    question: How does the target move over time, and does a driver's period average line up with it at lags 0..k?
+    target_types: [numeric, binary]
+    needs: [date]
+    params:
+      freq: {type: str, default: M, description: "period: W (week), M (month), Q (quarter)"}
+      x: {type: column, description: "optional numeric driver for lagged period-level correlation"}
+      max_lag: {type: int, default: 3, description: "largest lag in periods"}
+    caveats: [Period-level correlations have few points; shared trends inflate them.]
+
+  driver-importance:
+    phase: analysis
+    function: insight_core.tools_analysis:driver_importance
+    question: Taking all drivers together, which carry the most predictive signal, and what are their adjusted associations?
+    target_types: [numeric, binary, categorical]
+    params:
+      drivers: {type: columns, description: "subset of drivers (default: all scoped drivers)"}
+      max_depth: {type: int, default: 6, description: "random forest depth"}
+    method: Random forest permutation importance on a 25% holdout; standardized linear coefficients with CI.
+    caveats: [Importance is predictive usefulness, not the result of changing a driver.,
+              With an entity_column the holdout is whole entities, so the score reflects new entities.]
+
+  panel-decomposition:
+    phase: analysis
+    function: insight_core.tools_panel:panel_decomposition
+    question: For entities observed repeatedly (stores, restaurants, markets, customers), is the association a within-entity pattern (the same entity in its higher vs lower periods), a between-entity pattern (entities that are higher on average), or both?
+    target_types: [numeric, binary]
+    needs: [numeric_x, entity]
+    params:
+      x: {type: column, required: true, description: "numeric driver"}
+      time_effects: {type: bool, default: true, description: "also remove period-wide swings shared by all entities (uses date_column)"}
+    method: Spearman on ranks. Pooled r with entity-clustered CI; within r on ranks demeaned by entity (and period) with entity-clustered CI; between r on entity averages (n = entities).
+    caveats: [Within removes stable differences between entities, not changes over time that move with the driver.,
+              The between estimate rests on the number of entities, not rows.]
+
+  panel-drivers:
+    phase: analysis
+    function: insight_core.tools_panel:panel_drivers
+    question: Taking all numeric drivers together, which move with the target within entities over time, and which differ between entities?
+    target_types: [numeric, binary]
+    needs: [entity]
+    params:
+      drivers: {type: columns, description: "subset of numeric drivers (default: all scoped numeric drivers)"}
+      time_effects: {type: bool, default: true, description: "also remove period-wide swings shared by all entities (uses date_column)"}
+    method: Linear fixed-effects model on standardized values demeaned by entity (and period) with entity-clustered CIs; holdout R^2 on held-out entities; a between model on entity averages when there are enough entities.
+    caveats: [Linear, so curves are missed; drivers fixed within an entity only have a between estimate.]
+
+  multiple-testing:
+    phase: analysis
+    function: insight_core.tools_analysis:multiple_testing
+    question: Which findings survive Benjamini-Hochberg FDR across every test run (plan and follow-ups)?
+    target_types: [numeric, binary, categorical]
+    caveats: [Runs automatically after run_plan and every follow-up; not a pathway step.]
+
+  build-report:
+    phase: report
+    function: insight_core.report:build
+    question: Assemble the insight report (Markdown + self-contained HTML) from insights, review, and results.
+    outputs: report.md, report.html

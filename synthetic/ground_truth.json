@@ -1,0 +1,60 @@
+{
+  "store_weekly_sales.csv": {
+    "target": "weekly_sales_k",
+    "strong_positive": [
+      "foot_traffic"
+    ],
+    "negative": [
+      "stockout_rate"
+    ],
+    "nonlinear_inverted_u": [
+      "avg_price"
+    ],
+    "simpsons_paradox": {
+      "driver": "promo_spend_k",
+      "by": "region",
+      "note": "positive within every region, near zero or negative pooled"
+    },
+    "segment_heterogeneity": {
+      "driver": "staff_hours",
+      "by": "store_format",
+      "stronger_in": "Mall"
+    },
+    "null": [
+      "avg_temp_c"
+    ],
+    "leakage": [
+      "sales_per_visitor"
+    ],
+    "id": "store_id",
+    "date": "week_start",
+    "data_quality": [
+      "8 duplicate rows",
+      "12% missing customer_rating",
+      "6 promo_spend_k outliers x12"
+    ]
+  },
+  "employee_attrition.csv": {
+    "target": "left_company (Yes)",
+    "protective": [
+      "engagement_score",
+      "promoted_last_2y=Yes"
+    ],
+    "risk": [
+      "overtime_hours_month"
+    ],
+    "nonlinear": [
+      "tenure_years (risk concentrated in the first 2 years)"
+    ],
+    "weak": [
+      "commute_km"
+    ],
+    "null": [
+      "remote"
+    ],
+    "leakage": [
+      "exit_interview_done"
+    ],
+    "id": "employee_id"
+  }
+}

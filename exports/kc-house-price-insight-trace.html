@@ -1,0 +1,470 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How the sale-price insights were produced</title>
+<style>
+  :root {
+    --bg: #ffffff; --fill: #f4f4f5; --fill2: #e8e8eb; --stroke: #d4d4d8; --stroke2: #c4c4c8;
+    --text: #18181b; --text2: #52525b; --text3: #71717a; --accent: #2563eb;
+    --ok: #16a34a; --warn: #d97706; --info: #2563eb; --neutral: #a1a1aa;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #18181b; --fill: #232327; --fill2: #2e2e33; --stroke: #3f3f46; --stroke2: #52525b;
+      --text: #f4f4f5; --text2: #a1a1aa; --text3: #8b8b93; --accent: #60a5fa;
+      --ok: #4ade80; --warn: #fbbf24; --info: #60a5fa; --neutral: #71717a;
+    }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
+  main { max-width: 1120px; margin: 0 auto; padding: 32px 24px 48px; display: flex; flex-direction: column; gap: 28px; }
+  h1 { font-size: 22px; margin: 0 0 6px; }
+  h2 { font-size: 16px; margin: 0 0 8px; }
+  p { margin: 0; }
+  .muted { color: var(--text2); }
+  .small { font-size: 12px; }
+  .caption { font-size: 12px; color: var(--text3); }
+  .stats { display: flex; flex-wrap: wrap; gap: 36px; }
+  .stat .v { font-size: 22px; font-weight: 600; }
+  .stat .l { font-size: 12px; color: var(--text2); }
+  .pills { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-bottom: 8px; }
+  .pill { border: 1px solid var(--stroke); background: transparent; color: var(--text); border-radius: 999px;
+    padding: 2px 10px; font-size: 12px; cursor: pointer; }
+  .pill.active { background: var(--fill2); border-color: var(--stroke2); font-weight: 600; }
+  .map { width: 100%; overflow-x: auto; }
+  svg { display: block; width: 100%; min-width: 860px; font-family: inherit; }
+  svg g.node { cursor: pointer; }
+  .detail { border: 1px solid var(--stroke); border-radius: 6px; margin-top: 10px; }
+  .detail .hd { font-size: 12px; font-weight: 600; padding: 6px 12px; border-bottom: 1px solid var(--stroke); }
+  .detail .bd { font-size: 12px; padding: 10px 12px; }
+  table { width: 100%; border-collapse: collapse; font-size: 12px; border: 1px solid var(--stroke); border-radius: 6px; }
+  th, td { text-align: left; padding: 6px 10px; border-bottom: 1px solid var(--stroke); vertical-align: top; }
+  th { color: var(--text2); font-weight: 600; background: var(--fill); }
+  tr:last-child td { border-bottom: none; }
+  .dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 6px; vertical-align: middle; }
+  .tag { display: inline-block; border: 1px solid var(--stroke); border-radius: 999px; padding: 0 8px; font-size: 11px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media (max-width: 760px) { .grid2 { grid-template-columns: 1fr; } }
+  .card { border: 1px solid var(--stroke); border-radius: 6px; }
+  .card .hd { display: flex; justify-content: space-between; font-size: 12px; font-weight: 600; padding: 6px 12px; border-bottom: 1px solid var(--stroke); }
+  .card .hd span { font-weight: 400; color: var(--text3); }
+  .card .bd { padding: 10px 12px; }
+  .kv { display: grid; grid-template-columns: 100px 1fr; gap: 6px 12px; font-size: 12px; }
+  .kv .k { color: var(--text2); }
+  .chain { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .chain .box { border: 1px solid var(--stroke); background: var(--fill); border-radius: 5px; padding: 4px 8px; font-size: 12px; }
+  .chain .box b { display: block; }
+  .chain .box span { color: var(--text3); }
+  .callout { border: 1px solid var(--stroke); border-left: 3px solid var(--warn); border-radius: 6px; padding: 10px 14px; font-size: 13px; }
+  .callout b { display: block; margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<main>
+  <section>
+    <h1>How the sale-price insights were produced</h1>
+    <p class="muted">King County house sales, 21,613 rows, May 2014 to May 2015. Run 20261016-203235-kc-house-data. Every number here comes from the run's saved JSON artifacts. Associations only.</p>
+  </section>
+
+  <section class="stats">
+    <div class="stat"><div class="v">15 / 15</div><div class="l">Shelf tools used</div></div>
+    <div class="stat"><div class="v">13</div><div class="l">Plan steps run</div></div>
+    <div class="stat"><div class="v">47 / 49</div><div class="l">Tests pass FDR 0.05</div></div>
+    <div class="stat"><div class="v">4 + 2</div><div class="l">Supported + partial hypotheses</div></div>
+    <div class="stat"><div class="v">6</div><div class="l">Insights in report</div></div>
+  </section>
+
+  <section>
+    <h2>Lineage map: tool to report</h2>
+    <div class="pills" id="pills"><span class="small muted">Click any box to trace its lineage. Selected:</span></div>
+    <div class="map"><svg id="map"></svg></div>
+    <p class="caption" style="margin-top:8px">Solid lines: planned flow. Dashed lines: an insight citing a step as evidence. Dashed boxes: steps no insight cites (used for a verdict or a caveat). Not drawn: multiple-testing ran automatically after the plan (49 tests, 47 pass Benjamini-Hochberg FDR at 0.05). Source: analyses_index.json, review.json, insights.json · run 20261016-203235-kc-house-data.</p>
+    <div class="detail" id="detail"><div class="hd" id="detail-hd"></div><div class="bd" id="detail-bd"></div></div>
+  </section>
+
+  <section>
+    <h2>Every step, who ran it, what it produced</h2>
+    <table id="timeline"></table>
+    <p class="caption" style="margin-top:6px">Source: events.jsonl. Blue dots mark steps where your answers were recorded or the scope was locked.</p>
+  </section>
+
+  <section class="grid2">
+    <div class="card">
+      <div class="hd">Decisions you made <span>answers.json, scope.lock.json</span></div>
+      <div class="bd"><div class="kv" id="user-decisions"></div></div>
+    </div>
+    <div>
+      <p style="font-weight:600;margin-bottom:8px">Decisions agents and I made</p>
+      <div class="kv" id="agent-decisions" style="grid-template-columns:110px 1fr"></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>What the tools produced, and what was kept</h2>
+    <table id="findings"></table>
+    <p class="caption" style="margin-top:6px">Green: cited as insight evidence. Amber: used for a verdict or a caveat. Grey: produced by a tool but not carried into the report. Spearman r from target-associations; joint values are standardized coefficients from driver-importance. Source: results/H1.S1.json, results/H6.S2.json, insights.json.</p>
+  </section>
+
+  <section>
+    <h2>From insights to the report</h2>
+    <table id="insights"></table>
+    <p class="small muted" style="margin:10px 0 8px">Each artifact stores the SHA-256 of the one it was built from, so the report can be traced back to the prepared table:</p>
+    <div class="chain" id="chain"></div>
+  </section>
+
+  <div class="callout">
+    <b>Gaps in the trail</b>
+    View and year built had clear joint-model coefficients (0.103 and -0.197) but no hypothesis tested them, so they never reached the report. The monthly-median criterion in H6 could not be checked because time-trend reports monthly means. The waterfront prep rerun was my call, not yours.
+  </div>
+</main>
+
+<script>
+const TOOLS = [
+  { id: "target-associations", row: 0, question: "Which columns move with price, one at a time, ranked?" },
+  { id: "pair-deep-dive", row: 1.5, question: "What does one feature vs price look like across bins or levels?" },
+  { id: "segment-breakdown", row: 4, question: "Does the price level differ across segments?" },
+  { id: "segment-correlation", row: 5, question: "Does an association hold within each segment (Simpson's check)?" },
+  { id: "partial-correlation", row: 6, question: "Does the association survive holding other columns fixed?" },
+  { id: "nonlinearity-check", row: 8, question: "Is the relationship curved, so r understates it?" },
+  { id: "correlation-matrix", row: 10, question: "Which features overlap with each other?" },
+  { id: "driver-importance", row: 11, question: "Taking all features together, which carry the most predictive signal?" },
+  { id: "time-trend", row: 12, question: "How does price move over time?" },
+];
+
+const STEPS = [
+  { id: "H1.S1", tool: "target-associations", hyp: "H1", title: "Rank all 16 features", summary: "16 features ranked; strongest grade r=0.658, sqft_living r=0.644, sqft_living15 r=0.572 (n=21,613)." },
+  { id: "H1.S2", tool: "pair-deep-dive", hyp: "H1", title: "Living-area bins", summary: "sqft_living Spearman r=0.644, 95% CI 0.636 to 0.652, n=21,613." },
+  { id: "H2.S1", tool: "pair-deep-dive", hyp: "H2", title: "Grade levels", summary: "grade Spearman r=0.658, 95% CI 0.651 to 0.666, n=21,613." },
+  { id: "H2.S2", tool: "partial-correlation", hyp: "H2", title: "Grade | living area", summary: "raw r=0.658 to partial r=0.369 (95% CI 0.357 to 0.380), holding sqft_living fixed." },
+  { id: "H3.S1", tool: "segment-breakdown", hyp: "H3", title: "Price by waterfront", summary: "eta=0.266, 95% CI 0.223 to 0.308, n=21,613; gap about $1.13M." },
+  { id: "H3.S2", tool: "segment-correlation", hyp: "H3", title: "Size by waterfront", summary: "within non-waterfront r=0.641 (n=21,450); within waterfront r=0.850 (n=163). Flag: HETEROGENEITY." },
+  { id: "H4.S1", tool: "partial-correlation", hyp: "H4", title: "Bedrooms | living area", summary: "raw r=0.345 to partial r=-0.124 (95% CI -0.137 to -0.111). Flags: ATTENUATED, SIGN FLIP." },
+  { id: "H4.S2", tool: "nonlinearity-check", hyp: "H4", title: "Bedroom curve", summary: "quadratic adds 0.37% R-squared, below the approved 1% threshold." },
+  { id: "H5.S1", tool: "partial-correlation", hyp: "H5", title: "Latitude | size, grade", summary: "raw r=0.456 to partial r=0.572 (95% CI 0.563 to 0.581), holding sqft_living and grade fixed." },
+  { id: "H5.S2", tool: "nonlinearity-check", hyp: "H5", title: "Latitude curve", summary: "quadratic adds 2.98% R-squared; peak near latitude 47.7. Flag: NONLINEAR." },
+  { id: "H6.S1", tool: "correlation-matrix", hyp: "H6", title: "Feature overlap", summary: "4 feature pairs with |r| at least 0.7 (bathrooms, grade, sqft_living15 with sqft_living; sqft_lot with sqft_lot15)." },
+  { id: "H6.S2", tool: "driver-importance", hyp: "H6", title: "Joint model", summary: "holdout R-squared 0.818; top by importance sqft_living, lat, grade." },
+  { id: "H6.S3", tool: "time-trend", hyp: "H6", title: "Monthly trend", summary: "13 months; trend r=-0.017, 95% CI -0.562 to 0.539, q=0.957." },
+];
+
+const HYPS = [
+  { id: "H1", title: "Living area", verdict: "supported", reason: "Spearman r=0.644 met the threshold and mean price rose across all living-area bins." },
+  { id: "H2", title: "Grade beyond size", verdict: "supported", reason: "Partial r=0.369 after holding living area fixed, above the 0.1 criterion." },
+  { id: "H3", title: "Waterfront segment", verdict: "supported", reason: "Size association above 0.2 in both segments; heterogeneity, not Simpson's paradox." },
+  { id: "H4", title: "Bedrooms given size", verdict: "partially supported", reason: "Adjusted reversal passed; the curvature part missed the 1% R-squared threshold." },
+  { id: "H5", title: "Latitude gradient", verdict: "supported", reason: "Adjusted partial r=0.572 and marginal curvature both met their criteria." },
+  { id: "H6", title: "Joint view and months", verdict: "partially supported", reason: "Joint ranking passed; the monthly-median range criterion could not be tested (the tool reports means)." },
+];
+
+const INSIGHTS = [
+  { id: "I1", rank: 1, hyp: "H1", title: "Living area clearest", strength: "strong", confidence: "high", evidence: ["H3.S2", "H6.S2"], statement: "Within non-waterfront sales r=0.641 (95% CI 0.634 to 0.649, n=21,450, q=0); within waterfront r=0.850 (95% CI 0.802 to 0.888, n=163, q=0). Ranked first in the joint model." },
+  { id: "I2", rank: 2, hyp: "H2", title: "Grade beyond size", strength: "moderate", confidence: "high", evidence: ["H2.S2", "H2.S1"], statement: "Holding living area fixed, grade partial r=0.369 (95% CI 0.357 to 0.380, n=21,613, q=0)." },
+  { id: "I3", rank: 3, hyp: "H5", title: "Latitude signal", strength: "strong", confidence: "medium", evidence: ["H5.S1", "H5.S2"], statement: "Holding living area and grade fixed, latitude partial r=0.572 (95% CI 0.563 to 0.581, n=21,613, q=0); unadjusted curve peaks near 47.7." },
+  { id: "I4", rank: 4, hyp: "H3", title: "Waterfront segment", strength: "moderate", confidence: "medium", evidence: ["H3.S1", "H3.S2"], statement: "Waterfront eta=0.266 (95% CI 0.223 to 0.308, n=21,613, q=0); waterfront sales average about $1.13M more." },
+  { id: "I5", rank: 5, hyp: "H4", title: "Bedrooms reverse", strength: "weak", confidence: "high", evidence: ["H4.S1", "H4.S2"], statement: "Raw r=0.345, but holding living area fixed partial r=-0.124 (95% CI -0.137 to -0.111, n=21,613, q=0)." },
+  { id: "I6", rank: 6, hyp: "H6", title: "No monthly trend", strength: "null", confidence: "low", evidence: ["H6.S3"], statement: "Month vs mean price r=-0.017 (95% CI -0.562 to 0.539, n=13 months, q=0.957): not distinguishable from no trend." },
+];
+
+const TIMELINE = [
+  ["20:32", "Manager", "start_run.py", "run.json", "Run recorded on kc_house_data.csv with your request."],
+  ["20:33", "A4", "profile_data.py (profile-dataset)", "profile.json", "21,613 × 21, 11 flags; price skew 4.024, 420 extreme values."],
+  ["20:36", "Manager", "record_answers.py", "answers.json", "You chose: target price, purpose features, exclude id."],
+  ["20:37", "A2", "read_context.py, save_scope.py", "scope_proposal.json v1", "6 hypotheses, 3 questions for you."],
+  ["20:44", "A3", "check_feasibility.py, save_feasibility.py", "feasibility.json", "v1: 7 ok, 6 partial, 0 blocked."],
+  ["20:46", "Manager", "record_answers.py", "answers.json", "You answered Q1–Q3."],
+  ["20:48", "A2", "save_scope.py", "scope_proposal.json v2", "Applied your answers and A3's rewording; 0 open questions."],
+  ["20:50", "A3", "check_feasibility.py, save_feasibility.py", "feasibility.json", "v2: 10 ok, 3 partial, 0 blocked."],
+  ["20:52", "Manager", "approve_scope.py", "approved_scope.json, scope.lock.json", "Locked v2 on your words \"Yes, run this plan\"."],
+  ["20:52", "A4", "data_quality.py (data-quality-check, eda-overview)", "data_quality.json", "5 pass, 10 warn, 0 fail; no leakage."],
+  ["20:53", "A5", "prepare_data.py (prepare-dataset)", "prepared_data.json", "Default rule grouped waterfront=1 into Other."],
+  ["20:55", "A5", "prepare_data.py, rare_level_share 0.005", "prepared_data.json", "Waterfront 0/1 kept; 21,613 × 19."],
+  ["20:56", "A6", "run_plan.py (9 analysis tools + multiple-testing)", "results/, analyses_index.json", "13 steps done; 49 tests, 47 pass FDR."],
+  ["20:58", "A7", "review_checks.py, save_review.py", "review.json", "4 supported, 2 partially supported; no reruns."],
+  ["20:59", "A7", "save_insights.py", "insights.json", "6 insights chosen and ranked."],
+  ["20:59", "A7", "build_report.py (build-report)", "report.html, report.md", "6 insights, 8 charts."],
+  ["21:01", "Manager", "finalize_run.py", "final.json", "Run closed with the headline."],
+];
+
+const USER_DECISIONS = [
+  ["Outcome", "Sale price (price)"],
+  ["Purpose", "Which property features tend to go with a higher sale price"],
+  ["Leave out", "Property id"],
+  ["Q1 Unit", "every sale counts (unit = sale)"],
+  ["Q2 Scale", "raw price with rank-based statistics"],
+  ["Q3 Location", "keep lat/long and neighbor sizes, exclude zipcode"],
+  ["Approval", "Yes, run this plan"],
+];
+
+const AGENT_DECISIONS = [
+  ["A2 Scope", "Excluded sqft_above, which equals sqft_living minus sqft_basement exactly."],
+  ["A3 to A2", "v2 reworded H5 as a latitude gradient, labelled the H4/H5 curve checks as unadjusted, and recast months as observed movement only."],
+  ["Manager to A5", "Reran prep with rare_level_share 0.005 so the 163 waterfront sales stayed a level, as the approved H3 requires. That was my call, made without asking you."],
+  ["A7 Review", "Requested no reruns: no result raised a question the shelf could answer."],
+  ["A7 Review", "Led living area with within-segment estimates, because the association differs by waterfront."],
+  ["A7 Review", "Kept the bedroom curve out of the headline (0.37% R-squared, below the approved 1%)."],
+  ["A7 Review", "Marked H6 partial: the approved monthly-median criterion can't be tested by time-trend, which reports means. That is a tool gap."],
+];
+
+const FINDINGS = [
+  ["Living area | non-waterfront", "r=0.641 [0.634, 0.649], n=21,450", "H3.S2", "Selected, I1", "Within-segment estimate leads", "ok"],
+  ["Living area | waterfront", "r=0.850 [0.802, 0.888], n=163", "H3.S2", "Selected, I1", "Shows the segment difference", "ok"],
+  ["Living area, joint model", "std coef 0.449 [0.431, 0.467]", "H6.S2", "Selected, I1", "Ranked first by importance", "ok"],
+  ["Grade | living area", "partial r=0.369 [0.357, 0.380]", "H2.S2", "Selected, I2", "Signal beyond size", "ok"],
+  ["Latitude | size, grade", "partial r=0.572 [0.563, 0.581]", "H5.S1", "Selected, I3", "Strong adjusted gradient", "ok"],
+  ["Waterfront vs price", "eta=0.266 [0.223, 0.308]", "H3.S1", "Selected, I4", "Distinct segment", "ok"],
+  ["Bedrooms | living area", "partial r=-0.124 [-0.137, -0.111]", "H4.S1", "Selected, I5", "Sign reverses from raw r=0.345", "ok"],
+  ["Month vs mean price", "r=-0.017 [-0.562, 0.539], n=13, q=0.957", "H6.S3", "Selected, I6", "A null result is a finding", "ok"],
+  ["Living area, pooled", "r=0.644 [0.636, 0.652]", "H1.S1/S2", "Verdict only", "Pooled number hides the waterfront difference", "warn"],
+  ["Bedroom curve", "adds 0.37% R-squared", "H4.S2", "Caveat in I5", "Below the 1% threshold", "warn"],
+  ["Feature overlap", "4 pairs with |r| ≥ 0.7", "H6.S1", "Caveats", "Explains why rankings share signal", "warn"],
+  ["Joint model fit", "holdout R-squared 0.818", "H6.S2", "Verdict only", "Supports H6 ranking part", "warn"],
+  ["Neighbor living area (sqft_living15)", "r=0.572 [0.563, 0.581]; joint 0.051 [0.039, 0.064]", "H1.S1, H6.S2", "Not selected", "Neighbor proxy; overlaps living area (r=0.747)", "neutral"],
+  ["Bathrooms", "r=0.497 [0.487, 0.507]; joint 0.088 [0.075, 0.102]", "H1.S1, H6.S2", "Not selected", "Overlaps living area (r=0.746)", "neutral"],
+  ["Floors", "r=0.322 [0.310, 0.334]; joint 0.001 [-0.009, 0.012], q=0.850", "H1.S1, H6.S2", "Not selected", "Joint coefficient fails FDR", "neutral"],
+  ["View", "r=0.294 [0.282, 0.306]; joint 0.103 [0.094, 0.112]", "H1.S1, H6.S2", "Not selected", "No hypothesis tested it", "neutral"],
+  ["Year built", "r=0.102 [0.089, 0.115]; joint -0.197 [-0.208, -0.185]", "H1.S1, H6.S2", "Not selected", "No hypothesis tested it; sign differs in the joint model", "neutral"],
+  ["Basement size", "r=0.252 [0.239, 0.264]; joint -0.040 [-0.050, -0.029]", "H1.S1, H6.S2", "Not selected", "Weak; part of living area", "neutral"],
+  ["Renovation year", "r=0.102 [0.089, 0.115]", "H1.S1", "Not selected", "Weak; mixes renovated vs recency", "neutral"],
+  ["Lot size, longitude, neighbor lot, condition", "r from 0.019 to 0.075", "H1.S1", "Not selected", "Negligible", "neutral"],
+];
+
+const HASH_CHAIN = [
+  ["prepared_data.json", "2d808de8"],
+  ["analyses_index.json", "411f7b12"],
+  ["review.json", "8ed6e97f"],
+  ["insights.json", "d2c0df9f"],
+  ["report.html / .md", ""],
+];
+
+const CITED = new Set(INSIGHTS.flatMap(i => i.evidence));
+const ROW = 38, TOP = 44, NODE_W = 168;
+const COL_X = { tool: 8, step: 224, hyp: 440, insight: 656, report: 872 };
+const HEIGHT = { tool: 28, step: 28, hyp: 42, insight: 42, report: 84 };
+const SVG_W = COL_X.report + NODE_W + 8;
+const SVG_H = TOP + 14 + 12 * ROW + 50;
+const rowCy = r => TOP + 14 + r * ROW;
+const stepRow = id => STEPS.findIndex(s => s.id === id);
+const hypCy = h => {
+  const rows = STEPS.filter(s => s.hyp === h).map(s => stepRow(s.id));
+  return rowCy(rows.reduce((a, b) => a + b, 0) / rows.length);
+};
+
+const NODES = [
+  ...TOOLS.map(t => ({ id: t.id, col: "tool", cy: rowCy(t.row), title: t.id })),
+  ...STEPS.map((s, i) => ({ id: s.id, col: "step", cy: rowCy(i), title: s.id + "  " + s.title, dashed: !CITED.has(s.id) })),
+  ...HYPS.map(h => ({ id: h.id, col: "hyp", cy: hypCy(h.id), title: h.id + "  " + h.title, sub: h.verdict })),
+  ...INSIGHTS.map(i => ({ id: i.id, col: "insight", cy: hypCy(i.hyp), title: i.id + "  " + i.title, sub: i.strength + " · " + i.confidence + " confidence" })),
+  { id: "report", col: "report", cy: rowCy(6), title: "report.html + report.md", sub: "headline, 6 insights", sub2: "7 limits · 5 next steps · 8 charts" },
+];
+const NODE_BY_ID = new Map(NODES.map(n => [n.id, n]));
+
+const EDGES = [
+  ...STEPS.map(s => ({ from: s.tool, to: s.id, kind: "flow" })),
+  ...STEPS.map(s => ({ from: s.id, to: s.hyp, kind: "flow" })),
+  ...INSIGHTS.map(i => ({ from: i.hyp, to: i.id, kind: "flow" })),
+  ...INSIGHTS.map(i => ({ from: i.id, to: "report", kind: "flow" })),
+  ...INSIGHTS.flatMap(i => i.evidence.map(e => ({ from: e, to: i.id, kind: "evidence" }))),
+];
+
+function lineage(sel) {
+  if (!sel) return null;
+  const out = new Set([sel]);
+  const addStep = sid => { out.add(sid); const s = STEPS.find(x => x.id === sid); if (s) out.add(s.tool); };
+  const addInsight = i => { out.add(i.id); out.add(i.hyp); i.evidence.forEach(addStep); out.add("report"); };
+  const node = NODE_BY_ID.get(sel);
+  if (!node) return out;
+  if (node.col === "report") return new Set(NODES.map(n => n.id));
+  if (node.col === "insight") addInsight(INSIGHTS.find(i => i.id === sel));
+  if (node.col === "hyp") {
+    STEPS.filter(s => s.hyp === sel).forEach(s => addStep(s.id));
+    INSIGHTS.filter(i => i.hyp === sel).forEach(addInsight);
+  }
+  if (node.col === "step") {
+    addStep(sel);
+    out.add(STEPS.find(s => s.id === sel).hyp);
+    INSIGHTS.filter(i => i.evidence.includes(sel)).forEach(addInsight);
+  }
+  if (node.col === "tool") {
+    STEPS.filter(s => s.tool === sel).forEach(s => {
+      addStep(s.id); out.add(s.hyp);
+      INSIGHTS.filter(i => i.evidence.includes(s.id)).forEach(addInsight);
+    });
+  }
+  return out;
+}
+
+function detailFor(sel) {
+  const node = NODE_BY_ID.get(sel);
+  if (node.col === "tool") {
+    const t = TOOLS.find(x => x.id === sel);
+    const used = STEPS.filter(s => s.tool === sel).map(s => s.id).join(", ");
+    return ["Shelf tool: " + sel, t.question + " Used in " + used + "."];
+  }
+  if (node.col === "step") {
+    const s = STEPS.find(x => x.id === sel);
+    const by = INSIGHTS.filter(i => i.evidence.includes(sel)).map(i => i.id);
+    const use = by.length ? "Cited as evidence by " + by.join(", ") + "." : "Not cited by any insight; used for the hypothesis verdict or as a caveat.";
+    return ["Plan step " + s.id + " (" + s.tool + ")", s.summary + " " + use];
+  }
+  if (node.col === "hyp") {
+    const h = HYPS.find(x => x.id === sel);
+    return [h.id + " " + h.title + ": " + h.verdict, h.reason];
+  }
+  if (node.col === "insight") {
+    const i = INSIGHTS.find(x => x.id === sel);
+    const cross = i.evidence.filter(e => !e.startsWith(i.hyp + "."));
+    const note = cross.length ? " Evidence comes from " + cross.join(", ") + " rather than " + i.hyp + "'s own steps, because the within-segment result leads." : "";
+    return [i.id + " " + i.title + " (" + i.strength + ", " + i.confidence + " confidence)", i.statement + " Evidence: " + i.evidence.join(", ") + "." + note];
+  }
+  return ["Report", "build_report.py assembled the headline, all 6 insights, 7 limitations, 5 next steps, and 8 charts from insights.json, review.json, and results/."];
+}
+
+const NS = "http://www.w3.org/2000/svg";
+const css = name => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+function el(tag, attrs, text) {
+  const e = document.createElementNS(NS, tag);
+  for (const k in attrs) if (attrs[k] !== undefined) e.setAttribute(k, attrs[k]);
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+
+let sel = "I1";
+
+function renderPills() {
+  const box = document.getElementById("pills");
+  box.querySelectorAll("button").forEach(b => b.remove());
+  [...INSIGHTS.map(i => [i.id, i.id]), [null, "Show all"]].forEach(([id, label]) => {
+    const b = document.createElement("button");
+    b.className = "pill" + (sel === id ? " active" : "");
+    b.textContent = label;
+    b.onclick = () => { sel = id; render(); };
+    box.appendChild(b);
+  });
+}
+
+function renderMap() {
+  const svg = document.getElementById("map");
+  svg.setAttribute("viewBox", "0 0 " + SVG_W + " " + SVG_H);
+  svg.innerHTML = "";
+  const active = lineage(sel);
+  const isOn = id => !active || active.has(id);
+  const accent = css("--accent"), stroke = css("--stroke2"), fill = css("--fill"), fill2 = css("--fill2");
+  const text = css("--text"), text2 = css("--text2"), text3 = css("--text3");
+
+  [["tool", "Shelf tool"], ["step", "Plan step (A6)"], ["hyp", "Hypothesis verdict (A7)"], ["insight", "Insight (A7)"], ["report", "Report"]]
+    .forEach(([c, label]) => svg.appendChild(el("text", { x: COL_X[c], y: 18, "font-size": 11, "font-weight": 600, fill: text2 }, label)));
+
+  EDGES.forEach(e => {
+    const on = isOn(e.from) && isOn(e.to);
+    if (e.kind === "evidence" && (!active || !on)) return;
+    const a = NODE_BY_ID.get(e.from), b = NODE_BY_ID.get(e.to);
+    const x1 = COL_X[a.col] + NODE_W, x2 = COL_X[b.col], mx = (x1 + x2) / 2;
+    svg.appendChild(el("path", {
+      d: "M " + x1 + " " + a.cy + " C " + mx + " " + a.cy + ", " + mx + " " + b.cy + ", " + x2 + " " + b.cy,
+      fill: "none",
+      stroke: on && active ? accent : stroke,
+      "stroke-width": on && active ? 1.6 : 1,
+      "stroke-dasharray": e.kind === "evidence" ? "4 3" : undefined,
+      opacity: on ? 1 : 0.25,
+    }));
+  });
+
+  NODES.forEach(n => {
+    const h = HEIGHT[n.col], on = isOn(n.id), picked = sel === n.id;
+    const g = el("g", { class: "node", opacity: on ? 1 : 0.3 });
+    g.addEventListener("click", () => { sel = picked ? null : n.id; render(); });
+    g.appendChild(el("rect", {
+      x: COL_X[n.col], y: n.cy - h / 2, width: NODE_W, height: h, rx: 5,
+      fill: picked ? fill2 : fill,
+      stroke: on && active ? accent : stroke,
+      "stroke-width": picked ? 1.6 : 1,
+      "stroke-dasharray": n.dashed ? "3 3" : undefined,
+    }));
+    g.appendChild(el("text", { x: COL_X[n.col] + 8, y: n.sub ? n.cy - 3 : n.cy + 4, "font-size": 11, fill: text }, n.title));
+    if (n.sub) g.appendChild(el("text", { x: COL_X[n.col] + 8, y: n.cy + 12, "font-size": 10, fill: text3 }, n.sub));
+    if (n.sub2) g.appendChild(el("text", { x: COL_X[n.col] + 8, y: n.cy + 27, "font-size": 10, fill: text3 }, n.sub2));
+    svg.appendChild(g);
+  });
+
+  const box = document.getElementById("detail");
+  if (sel) {
+    const [hd, bd] = detailFor(sel);
+    document.getElementById("detail-hd").textContent = hd;
+    document.getElementById("detail-bd").textContent = bd;
+    box.style.display = "";
+  } else {
+    box.style.display = "none";
+  }
+}
+
+function render() { renderPills(); renderMap(); }
+
+function table(id, headers, rows, tones) {
+  const t = document.getElementById(id);
+  const tr = document.createElement("tr");
+  headers.forEach(h => { const th = document.createElement("th"); th.textContent = h; tr.appendChild(th); });
+  t.appendChild(tr);
+  rows.forEach((r, k) => {
+    const row = document.createElement("tr");
+    r.forEach((c, j) => {
+      const td = document.createElement("td");
+      if (j === 0 && tones && tones[k]) {
+        const d = document.createElement("span");
+        d.className = "dot";
+        d.style.background = "var(--" + tones[k] + ")";
+        td.appendChild(d);
+      }
+      if (c instanceof Node) td.appendChild(c); else td.appendChild(document.createTextNode(c));
+      row.appendChild(td);
+    });
+    t.appendChild(row);
+  });
+}
+
+function tag(text) { const s = document.createElement("span"); s.className = "tag"; s.textContent = text; return s; }
+
+table("timeline", ["Time", "Agent", "Script (shelf tool)", "Artifact", "Outcome or decision"],
+  TIMELINE.map(r => [r[0], tag(r[1]), r[2], r[3], r[4]]),
+  TIMELINE.map(r => r[1] === "Manager" && (r[2].includes("record") || r[2].includes("approve")) ? "info" : null));
+
+const ud = document.getElementById("user-decisions");
+USER_DECISIONS.forEach(([k, v]) => {
+  const a = document.createElement("div"); a.className = "k"; a.textContent = k;
+  const b = document.createElement("div"); b.textContent = "\u201C" + v + "\u201D";
+  ud.append(a, b);
+});
+const ad = document.getElementById("agent-decisions");
+AGENT_DECISIONS.forEach(([k, v]) => {
+  const a = document.createElement("div"); a.className = "k"; a.textContent = k;
+  const b = document.createElement("div"); b.textContent = v;
+  ad.append(a, b);
+});
+
+table("findings", ["Finding", "Estimate (95% CI; n=21,613 unless noted)", "Step", "Outcome", "Why"],
+  FINDINGS.map(f => { const o = document.createElement("b"); o.textContent = f[3]; return [f[0], f[1], f[2], o, f[4]]; }),
+  FINDINGS.map(f => f[5]));
+
+table("insights", ["Rank", "Insight", "Strength, confidence", "Hypothesis verdict", "Evidence cited"],
+  INSIGHTS.map(i => {
+    const h = HYPS.find(x => x.id === i.hyp);
+    const t = document.createElement("b"); t.textContent = i.id + " " + i.title;
+    return [String(i.rank), t, i.strength + ", " + i.confidence, h.id + " " + h.verdict, i.evidence.join(", ")];
+  }));
+
+const chain = document.getElementById("chain");
+HASH_CHAIN.forEach(([file, sha], k) => {
+  const box = document.createElement("div"); box.className = "box";
+  const b = document.createElement("b"); b.textContent = file; box.appendChild(b);
+  if (sha) { const s = document.createElement("span"); s.textContent = "sha256 " + sha + "\u2026"; box.appendChild(s); }
+  chain.appendChild(box);
+  if (k < HASH_CHAIN.length - 1) { const a = document.createElement("span"); a.className = "caption"; a.textContent = "\u2192"; chain.appendChild(a); }
+});
+
+render();
+window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", renderMap);
+</script>
+</body>
+</html>

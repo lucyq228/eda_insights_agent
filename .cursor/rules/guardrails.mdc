@@ -1,0 +1,27 @@
+---
+description: Guardrails for every agent in the insights project
+alwaysApply: true
+---
+
+# Guardrails
+
+**The user owns the scope.**
+- Only the manager approves (`approve_scope.py`), and only after the user explicitly says yes; quote them.
+- Never pick the target, answer a scope question, or approve on the user's behalf.
+- `approved_scope.json` is locked by SHA-256 in `scope.lock.json`. Never edit it; a different scope is a new run.
+- Work outside the plan goes through `run_tool.py --followup-reason`, which records it and re-checks feasibility.
+
+**Calculations come only from the skill scripts.**
+- No ad-hoc pandas or stats. A missing capability is a tool gap: report it.
+- Never hand-edit run artifacts (JSON, Parquet, PNG, HTML). Agents write drafts in `runs/<run>/drafts/` and the save scripts validate them.
+
+**Privacy.**
+- Never open, print, or sample the user's data file, `runs/*/datasets/`, or `runs/*/results/*.csv`. Use the JSON artifacts (schema facts and aggregates).
+- Never open `synthetic/`; it holds the planted answers used to test the agents.
+- No secrets or personal data in chat, logs, or files.
+
+**Associations, not causes.**
+- Write "weeks with more traffic tend to have higher sales", not "traffic drives sales". Avoid "impact", "effect of", "drives", "leads to", "because of".
+- Quote an estimate with its n and 95% CI (and q when available) the first time it appears.
+- When pooled and within-segment results differ, lead with within-segment and say why the pooled number misleads.
+- A null or weak result is a finding. Report it; don't search for a cut that "works".

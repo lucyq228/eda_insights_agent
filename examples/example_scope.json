@@ -1,0 +1,91 @@
+{
+  "project_name": "What moves with weekly store sales?",
+  "purpose": "Find which operational levers (traffic, staffing, promotions, pricing, stock availability) are associated with weekly sales, so the ops team knows where to look first.",
+  "decision_supported": "Where to focus next quarter's store operations improvement budget (staffing, promo, pricing, or stock availability).",
+  "target": {
+    "column": "weekly_sales_k",
+    "type": "numeric",
+    "definition": "Store sales for the week in thousands; higher is better."
+  },
+  "unit_of_analysis": "store-week",
+  "id_column": "store_id",
+  "date_column": "week_start",
+  "entity_column": "store_id",
+  "drivers": "all",
+  "exclude": [
+    {"column": "sales_per_visitor", "reason": "Computed from weekly sales, so it would leak the target."}
+  ],
+  "segments": ["region", "store_format"],
+  "controls": ["region"],
+  "min_n": 30,
+  "alpha": 0.05,
+  "hypotheses": [
+    {
+      "id": "H1",
+      "statement": "Stores and weeks with more foot traffic tend to have higher weekly sales.",
+      "rationale": "Traffic is the most direct volume measure; it anchors the size of the other associations.",
+      "support_criteria": "Spearman r > 0.3 with a CI excluding 0 and q < 0.05.",
+      "pathway": [
+        {"tool": "target-associations", "params": {}, "purpose": "Rank every driver against sales."},
+        {"tool": "pair-deep-dive", "params": {"x": "foot_traffic"}, "purpose": "Look at the shape across traffic deciles."}
+      ]
+    },
+    {
+      "id": "H2",
+      "statement": "Promotion spend is positively associated with sales within each region.",
+      "rationale": "Regions differ in both promo budgets and baseline sales, so the pooled number may mislead.",
+      "support_criteria": "Within-region Spearman r > 0.1 with CI excluding 0; pooled and within compared.",
+      "pathway": [
+        {"tool": "segment-correlation", "params": {"x": "promo_spend_k", "by": "region"}, "purpose": "Compare pooled vs within-region association."},
+        {"tool": "panel-decomposition", "params": {"x": "promo_spend_k"}, "purpose": "Split into within-store (same store, weeks with more vs less promo) and between-store (high- vs low-promo stores)."}
+      ]
+    },
+    {
+      "id": "H3",
+      "statement": "Sales peak at a mid-range average price rather than rising or falling steadily with price.",
+      "rationale": "Pricing usually trades volume against margin; a curve would make a correlation look like zero.",
+      "support_criteria": "Quadratic term significant (p < 0.05) and adds at least 1% R^2.",
+      "pathway": [
+        {"tool": "nonlinearity-check", "params": {"x": "avg_price"}, "purpose": "Test for curvature and find the turning point."}
+      ]
+    },
+    {
+      "id": "H4",
+      "statement": "Higher stockout rates are associated with lower sales after holding traffic and region fixed.",
+      "rationale": "Availability is a lever; checking it net of traffic avoids reading busy-store effects as stock effects.",
+      "support_criteria": "Partial Spearman r < -0.1 with CI excluding 0.",
+      "pathway": [
+        {"tool": "partial-correlation", "params": {"x": "stockout_rate", "controls": ["foot_traffic", "region"]}, "purpose": "Association net of traffic and region."}
+      ]
+    },
+    {
+      "id": "H5",
+      "statement": "Taking all drivers together, traffic, price, and stock availability carry most of the predictive signal.",
+      "rationale": "One-at-a-time screens overlap; a joint model shows which signals are distinct.",
+      "support_criteria": "These three are in the top four by permutation importance; holdout R^2 > 0.3.",
+      "pathway": [
+        {"tool": "correlation-matrix", "params": {}, "purpose": "Check overlap between drivers."},
+        {"tool": "driver-importance", "params": {}, "purpose": "Joint importance and adjusted associations."},
+        {"tool": "panel-drivers", "params": {}, "purpose": "Which drivers move with sales within the same store over time, and which only separate stores."},
+        {"tool": "time-trend", "params": {"freq": "M"}, "purpose": "Check for a seasonal pattern that could confound weekly comparisons."}
+      ]
+    }
+  ],
+  "user_questions": [
+    {
+      "id": "Q1",
+      "question": "Is weekly_sales_k the right target, or should we look at a margin measure instead?",
+      "options": ["weekly_sales_k", "a margin measure (needs new data)"],
+      "recommended": "weekly_sales_k",
+      "why_it_matters": "Price findings flip meaning if the goal is margin rather than revenue."
+    },
+    {
+      "id": "Q2",
+      "question": "Should the comparison focus on differences between regions, or within them?",
+      "options": ["within regions (recommended)", "pooled across regions"],
+      "recommended": "within regions (recommended)",
+      "why_it_matters": "Regions differ in promo budgets and baseline sales; pooled results can reverse."
+    }
+  ],
+  "out_of_scope": ["Causal claims or forecasts of sales lifts", "Store-level recommendations for individual stores"]
+}
