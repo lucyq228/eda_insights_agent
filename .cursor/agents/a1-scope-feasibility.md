@@ -24,3 +24,8 @@ Read AGENTS.md and docs/architecture.md. Do not inspect raw rows or synthetic/.
 
 Return: scope version, proposed metrics and views, assumptions, gaps, feasible initial plan,
 and any material questions. Do not execute the analysis or fabricate user answers.
+
+For new runs set report_schema_version: 2. Record business_context with audience, decision,
+available_levers, constraints, success_measures and unknowns. Use explicit 'unknown' or empty
+lists when context is unavailable; do not block broad exploration on routine context gaps.
+Distinguish proposed levers from confirmed capabilities. Plan questions that can change a decision.

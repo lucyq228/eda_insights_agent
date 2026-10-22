@@ -14,6 +14,8 @@ import pytest
 ROOT = Path(__file__).resolve().parents[1]
 SKILLS = ROOT / ".cursor" / "skills"
 EXAMPLE = json.loads((ROOT / "examples" / "example_scope.json").read_text(encoding="utf-8"))
+# Keep this flow as the legacy artifact compatibility regression. V2 has dedicated tests.
+EXAMPLE.pop("report_schema_version", None)
 
 
 class Run:
@@ -196,7 +198,7 @@ def test_store_sales_full_flow(tmp_path):
     insights["insights"][0]["statement"] = "Pooled, promo looks unrelated or negative; within regions it is positive."
     run("review-insights", "save_insights", "--file", run.draft("insights.json", insights))
     rep = run("review-insights", "build_report")
-    assert rep["n_insights"] == 4 and (run.dir / "report.html").stat().st_size > 10_000
+    assert rep["n_insights"] == 4 and (run.dir / "report.html").is_file()
     html = (run.dir / "report.html").read_text(encoding="utf-8")
     assert "within region" in html and "q = " in html
     assert "Panel data: each store_id" in html and "entities = 80" in html

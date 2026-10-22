@@ -23,3 +23,12 @@ denominators and evidence_type, without fabricated CIs. Rank by decision relevan
 For each recommendation require action, rationale, evidence, evidence_type, assumptions, risks,
 success_metric and validation_plan. Do not claim observed differences prove an intervention works.
 Return key findings, tested versus untested questions, limitations, and proposed next actions.
+
+Use business-reporting/SKILL.md and docs/business-report-schema.md. For v2 scopes, require a v2
+insights draft. Review business usefulness as well as accuracy: action, audience, intervention,
+mechanism, alternatives, feasibility, evidence and decision rule. Reject generic 'test engagement'
+without a concrete proposal or explicit decision-unlocking investigation. Request follow-ups that
+could change a recommendation. Do not manufacture an action to fill a quota.
+Record business_review judgments; resolve revise items before saving. Write a concise executive
+takeaway and decision request, then actions and supporting findings. Select key evidence and
+charts deliberately. Keep decisive uncertainty visible; put the technical audit trail in detail.

@@ -87,5 +87,18 @@
       "why_it_matters": "Regions differ in promo budgets and baseline sales; pooled results can reverse."
     }
   ],
-  "out_of_scope": ["Causal claims or forecasts of sales lifts", "Store-level recommendations for individual stores"]
+  "out_of_scope": ["Causal claims or forecasts of sales lifts", "Store-level recommendations for individual stores"],
+  "report_schema_version": 2,
+  "business_context": {
+    "audience": "Business decision maker (assumed)",
+    "decision": "Where to focus next quarter's store operations improvement budget (staffing, promo, pricing, or stock availability).",
+    "available_levers": [],
+    "constraints": [],
+    "success_measures": [
+      "Store sales for the week in thousands; higher is better."
+    ],
+    "unknowns": [
+      "Available interventions, budget, operational owners and business thresholds are not confirmed."
+    ]
+  }
 }

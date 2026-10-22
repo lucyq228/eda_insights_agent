@@ -23,3 +23,7 @@ Lifecycle: request -> profile -> scope + feasibility -> activate -> analyst inve
 
 Use `.venv/Scripts/python.exe` on Windows or `python` on Linux with
 `.cursor/skills/<skill>/scripts/<script>.py`. See docs/architecture.md and examples/qvi_scope.json.
+
+New reports use schema v2 and `.cursor/skills/business-reporting/SKILL.md`. Keep exactly three
+agents. Analysts propose actions; reviewers judge their usefulness and evidence, then produce a
+decision-first report. No fixed action count, invented lift, or forced business recommendation.

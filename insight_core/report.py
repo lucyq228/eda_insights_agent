@@ -21,7 +21,13 @@ def _qmap(results: dict) -> dict:
 
 
 def _fmt(v, digits=3):
-    return "n/a" if v is None else f"{v:.{digits}g}" if isinstance(v, float) else str(v)
+    if v is None:
+        return "n/a"
+    if isinstance(v, (int, float)):
+        if v != 0 and abs(v) < .0001:
+            return f"{v:.{digits}g}"
+        return f"{v:,.4f}".rstrip("0").rstrip(".")
+    return str(v)
 
 
 def evidence_line(f: dict, q) -> str:
@@ -41,122 +47,164 @@ def panel_line(scope: dict) -> str | None:
             f"clustered by {ent}.")
 
 
+def _text(value):
+    return '; '.join(str(x) for x in value) if isinstance(value, list) else str(value)
+
+
+def _evidence(refs, results, qmap):
+    lines = []
+    for ev in refs:
+        r = results.get(ev.get('result'), {})
+        f = next((x for x in r.get('findings', []) if x['label'] == ev.get('finding')), None)
+        if f:
+            lines.append(f"{ev['result']} — {evidence_line(f, qmap.get((ev['result'], ev['finding'])))}")
+        else:
+            lines.append(f"{ev.get('result')} — {ev.get('finding') or r.get('summary', 'result reference')}")
+    return lines
+
+
+ACTION_MAIN = [('audience', 'Who / where'), ('intervention', 'What to do'),
+               ('expected_benefit', 'Expected benefit'),
+               ('success_metric', 'Measure success'), ('decision_rule', 'Decision rule'),
+               ('proposed_owner', 'Proposed owner')]
+ACTION_DETAIL = [('priority_reason', 'Why this priority'), ('dependencies', 'Dependencies'),
+                 ('mechanism_hypothesis', 'Hypothesis to validate'), ('benefit_basis', 'Benefit basis'),
+                 ('benefit_calculation', 'Benefit calculation / assumptions'),
+                 ('implementation_basis', 'Basis for implementation'),
+                 ('alternatives_considered', 'Alternatives considered'), ('validation_plan', 'Validation plan'),
+                 ('assumptions', 'Assumptions'), ('risks', 'Risks'), ('evidence_type', 'Evidence type')]
+
+
 def build(run_dir: Path) -> dict:
-    scope = read_artifact(run_dir, "approved_scope.json")
-    insights = read_artifact(run_dir, "insights.json")
-    review = read_artifact(run_dir, "review.json")
-    dq = read_artifact(run_dir, "data_quality.json") or {}
-    prep = read_artifact(run_dir, "prepared_data.json") or {}
-    analyses = read_artifact(run_dir, "analyses_index.json") or {}
+    from .report_contract import selected_charts
+    scope = read_artifact(run_dir, 'approved_scope.json')
+    draft = read_artifact(run_dir, 'insights.json')
+    review = read_artifact(run_dir, 'review.json')
+    prep = read_artifact(run_dir, 'prepared_data.json') or {}
+    dq = read_artifact(run_dir, 'data_quality.json') or {}
+    analyses = read_artifact(run_dir, 'analyses_index.json') or {}
     results = _results(run_dir)
-    skipped = [s for s in analyses.get("steps", []) if s.get("status") == "skipped"]
     qmap = _qmap(results)
-
-    md = [f"# {scope['project_name']}", "",
-          f"**Purpose:** {scope['purpose']}  ", f"**Decision supported:** {scope['decision_supported']}  ",
-          f"**Target:** `{scope['target']['column']}` ({scope['target']['type']}) - {scope['target']['definition']}  ",
-          f"**Data:** {prep.get('n_rows')} rows after preparation; unit = {scope['unit_of_analysis']}", "",
-          "> Descriptive findings and observational associations do not establish causes. Statistical estimates show available n, CI, "
-          "and q (Benjamini-Hochberg across recorded tests). Data-selected follow-ups remain exploratory.", ""]
-    if panel_line(scope):
-        md += [f"> {panel_line(scope)}", ""]
-    md += ["## Summary", "", insights["headline_summary"], "", "## Key insights", ""]
-    blocks = []
-    for ins in insights["insights"]:
-        ev_lines, imgs = [], []
-        for ev in ins["evidence"]:
-            r = results.get(ev["result"], {})
-            f = next((x for x in r.get("findings", []) if x["label"] == ev["finding"]), None)
-            if f:
-                ev_lines.append(evidence_line(f, qmap.get((ev["result"], ev["finding"]))))
-            imgs += [c for c in r.get("charts", []) if c and Path(c).exists()][:1]
-        imgs = list(dict.fromkeys(imgs))[:2]
-        md += [f"### {ins['id']}. {ins['title']}", "", ins["statement"], "",
-               f"*Strength:* {ins['strength']} | *Confidence:* {ins['confidence']}", ""]
-        md += [f"- {e}" for e in ev_lines]
-        md += [f"- Caveat: {c}" for c in ins.get("caveats", [])]
-        if ins.get("suggested_next_step"):
-            md += [f"- Next step: {ins['suggested_next_step']}"]
-        md += [f"![{ins['id']}](charts/{Path(i).name})" for i in imgs] + [""]
-        blocks.append((ins, ev_lines, imgs))
-
-    md += ["## Proposed business actions", ""]
-    for rec in insights.get("recommendations", []):
-        md += [f"### {rec['action']}", rec['rationale'],
-               f"Evidence: {rec['evidence_type']}", f"Validation: {rec['validation_plan']}",
-               f"Success metric: {rec['success_metric']}", f"Assumptions: {rec['assumptions']}",
-               f"Risks: {rec['risks']}", ""]
-    md += ["## Hypothesis verdicts", "", "| Hypothesis | Verdict | Reasoning |", "|---|---|---|"]
-    for v in review["hypothesis_verdicts"]:
-        md.append(f"| {v['id']} | {v['verdict']} | {v['reasoning'].replace('|', '/')} |")
-    md += ["", "## Limitations", ""] + [f"- {x}" for x in insights.get("limitations", [])]
-    md += ["", "## Recommended next steps", ""] + [f"- {x}" for x in insights.get("next_steps", [])]
-    md += ["", "## Appendix: how the data was prepared", ""] + [f"- {x}" for x in prep.get("log", [])]
-    md += [f"- Data quality: {dq.get('summary', 'n/a')}", "", "## Appendix: analyses run", ""]
-    for label, r in sorted(results.items()):
-        tag = " (follow-up: " + r["followup_reason"] + ")" if r.get("followup_reason") else ""
-        md.append(f"- `{label}` {r['tool']}{tag}: {r.get('summary') or r.get('error')}")
-    for step in skipped:
-        md.append(f"- `{step['step_id']}` {step['tool']} (user-approved skip): {step.get('skip_reason')}")
-    (run_dir / "report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
-    (run_dir / "report.html").write_text(_html(scope, insights, review, blocks, prep, dq, results, skipped), encoding="utf-8")
-    return {"files": ["report.md", "report.html"], "n_insights": len(insights["insights"]),
-            "n_charts": sum(len(b[2]) for b in blocks)}
-
-
-def _img(path: str) -> str:
-    data = base64.b64encode(Path(path).read_bytes()).decode()
-    return f'<img src="data:image/png;base64,{data}" alt="chart">'
-
-
-def _html(scope, insights, review, blocks, prep, dq, results, skipped) -> str:
-    e = html.escape
-    cards = []
-    for ins, ev_lines, imgs in blocks:
-        cards.append(
-            f'<section class="card"><h3>{e(ins["id"])}. {e(ins["title"])}</h3><p>{e(ins["statement"])}</p>'
-            f'<p class="tags"><span>{e(ins["strength"])}</span><span>confidence: {e(ins["confidence"])}</span></p>'
-            f'<ul class="ev">{"".join(f"<li>{e(x)}</li>" for x in ev_lines)}</ul>'
-            + "".join(f'<p class="caveat">Caveat: {e(c)}</p>' for c in ins.get("caveats", []))
-            + (f'<p class="next">Next step: {e(ins["suggested_next_step"])}</p>' if ins.get("suggested_next_step") else "")
-            + f'<div class="imgs">{"".join(_img(i) for i in imgs)}</div></section>')
-    verdicts = "".join(f"<tr><td>{e(v['id'])}</td><td class='v-{e(v['verdict'])}'>{e(v['verdict'])}</td>"
-                       f"<td>{e(v['reasoning'])}</td></tr>" for v in review["hypothesis_verdicts"])
-    lims = "".join(f"<li>{e(x)}</li>" for x in insights.get("limitations", []))
-    nexts = "".join(f"<li>{e(x)}</li>" for x in insights.get("next_steps", []))
-    runs = "".join(f"<li><code>{e(k)}</code> {e(r['tool'])}: {e(str(r.get('summary') or r.get('error')))}</li>"
-                   for k, r in sorted(results.items()))
-    runs += "".join(f"<li><code>{e(s['step_id'])}</code> {e(s['tool'])} (user-approved skip): "
-                    f"{e(str(s.get('skip_reason')))}</li>" for s in skipped)
-    actions = "".join(f"<section class='card'><h3>{e(r['action'])}</h3><p>{e(r['rationale'])}</p>"
-                      f"<p>Evidence: {e(r['evidence_type'])}</p><p>Validation: {e(r['validation_plan'])}</p>"
-                      f"<p>Success metric: {e(r['success_metric'])}</p><p>Assumptions: {e(str(r['assumptions']))}</p>"
-                      f"<p>Risks: {e(str(r['risks']))}</p></section>" for r in insights.get("recommendations", []))
-    t = scope["target"]
-    panel_html = f'<p class="note">{e(panel_line(scope))}</p>' if panel_line(scope) else ""
-    return f"""<!doctype html><html><head><meta charset="utf-8"><title>{e(scope['project_name'])}</title>
-<style>
-body{{font-family:Segoe UI,Arial,sans-serif;max-width:980px;margin:32px auto;padding:0 20px;color:#1f2933;line-height:1.5}}
-h1{{margin-bottom:4px}} .meta{{color:#52606d}} .note{{background:#f0f4f8;border-left:4px solid #2f6db5;padding:10px 14px}}
-.card{{border:1px solid #d9e2ec;border-radius:8px;padding:14px 18px;margin:16px 0}}
-.tags span{{background:#e3ecf7;border-radius:10px;padding:2px 10px;margin-right:6px;font-size:13px}}
-.ev{{font-family:Consolas,monospace;font-size:13px}} .caveat{{color:#8a4b08}} .next{{color:#196c2e}}
-.imgs img{{max-width:48%;margin:6px 1% 0 0;border:1px solid #eee}}
-table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #d9e2ec;padding:6px 8px;vertical-align:top}}
-.v-supported{{color:#196c2e;font-weight:600}} .v-not_supported{{color:#a61b1b;font-weight:600}}
-.v-partially_supported,.v-inconclusive,.v-not_evaluated{{color:#8a4b08;font-weight:600}}
-</style></head><body>
-<h1>{e(scope['project_name'])}</h1>
-<p class="meta"><b>Purpose:</b> {e(scope['purpose'])}<br><b>Decision supported:</b> {e(scope['decision_supported'])}<br>
-<b>Target:</b> <code>{e(t['column'])}</code> ({e(t['type'])}) - {e(t['definition'])}<br>
-<b>Data:</b> {prep.get('n_rows')} rows after preparation; unit = {e(scope['unit_of_analysis'])}</p>
-<p class="note">Descriptive findings and observational associations do not establish causes. Statistical estimates show available n, CI, and q
-(Benjamini-Hochberg across recorded tests). Data-selected follow-ups remain exploratory.</p>
-{panel_html}
-<h2>Summary</h2><p>{e(insights['headline_summary'])}</p>
-<h2>Key insights</h2>{''.join(cards)}
-<h2>Proposed business actions</h2>{actions}<h2>Hypothesis verdicts</h2><table><tr><th>Hypothesis</th><th>Verdict</th><th>Reasoning</th></tr>{verdicts}</table>
-<h2>Limitations</h2><ul>{lims}</ul><h2>Recommended next steps</h2><ul>{nexts}</ul>
-<h2>Appendix</h2><p>Data quality: {e(str(dq.get('summary', 'n/a')))}</p>
-<ul>{''.join(f'<li>{e(x)}</li>' for x in prep.get('log', []))}</ul><h3>Analyses run</h3><ul>{runs}</ul>
-</body></html>"""
+    e = lambda value: html.escape(_text(value), quote=True)
+    paras = lambda pairs: ''.join(f'<p><b>{e(label)}:</b> {e(value)}</p>' for label, value in pairs if value)
+    lis = lambda values: '<ul>' + ''.join(f'<li>{e(v)}</li>' for v in values) + '</ul>'
+    details = lambda title, content: f'<details><summary>{e(title)}</summary>{content}</details>'
+    md = [f"# {scope['project_name']}", '', '## Executive takeaway', '', draft['headline_summary'], '']
+    body = [f"<h1>{e(scope['project_name'])}</h1>", '<section class="executive"><h2>Executive takeaway</h2>',
+            f"<p class='lead'>{e(draft['headline_summary'])}</p>"]
+    decision = draft.get('decision_requested', scope['decision_supported'])
+    md += [f'**Decision requested:** {decision}', '']
+    body += [paras([('Decision requested', decision)]), '</section>']
+    note = 'Observed patterns inform proposed actions; they do not establish intervention lift.'
+    body.append(f'<p class="note">{e(note)}</p>')
+    md += [f'> {note}', '', '## Prioritized actions', '']
+    body.append('<h2>Prioritized actions</h2>')
+    action_appendix = []
+    recommendations = draft.get('recommendations', [])
+    if not recommendations:
+        reason = draft.get('no_recommendations_reason', 'No recommendations were recorded in this legacy report.')
+        body.append(f'<p>{e(reason)}</p>'); md += [reason, '']
+    for i, rec in enumerate(recommendations, 1):
+        heading = f"{i}. {rec['action']}"
+        kind = rec.get('action_type', 'proposal')
+        main = [(label, rec.get(key)) for key, label in ACTION_MAIN]
+        extra = [(label, rec.get(key)) for key, label in ACTION_DETAIL]
+        ev = _evidence(rec.get('evidence', []), results, qmap)
+        body += [f'<section class="action"><span class="tag">{e(kind)}</span><h3>{e(heading)}</h3>',
+                 f"<p>{e(rec['rationale'])}</p>", paras(main),
+                 details('Evidence, alternatives and validation', paras(extra) + lis(ev)), '</section>']
+        md += [f'### {heading}', '', f'*Action type: {kind}*', '', rec['rationale'], '']
+        md += [f'**{label}:** {_text(value)}  ' for label, value in main if value] + ['']
+        action_appendix += [f'### Action {i}: evidence and validation', '']
+        action_appendix += [f'**{label}:** {_text(value)}  ' for label, value in extra if value]
+        action_appendix += [''] + [f'- {x}' for x in ev] + ['']
+    uncertainties = draft.get('decision_uncertainties', draft.get('limitations', []))
+    if uncertainties:
+        body += ['<h2>What could change the decision</h2>', lis(uncertainties)]
+        md += ['## What could change the decision', ''] + [f'- {x}' for x in uncertainties] + ['']
+    body.append('<h2>Supporting findings</h2>'); md += ['## Supporting findings', '']
+    finding_appendix = []
+    n_charts = 0
+    for ins in draft.get('insights', []):
+        brief = ins.get('brief_summary', ins['statement'])
+        title = f"{ins['id']}. {ins['title']}"
+        full = _evidence(ins['evidence'], results, qmap)
+        key = _evidence(ins.get('key_evidence', []), results, qmap)
+        charts = selected_charts(ins, results, run_dir)
+        n_charts += len(charts)
+        meaning = ins.get('business_implication')
+        caveat = ins.get('decision_caveat')
+        body += [f'<section class="finding"><h3>{e(title)}</h3><p>{e(brief)}</p>',
+                 paras([('Why it matters', meaning), ('Decision caveat', caveat)])]
+        if key:
+            body.append(lis(key))
+        md += [f'### {title}', '', brief, '']
+        md += [f'**{label}:** {value}' for label, value in [('Why it matters', meaning), ('Decision caveat', caveat)] if value]
+        md += [''] + [f'- {x}' for x in key] + ['']
+        for path, caption in charts:
+            encoded = base64.b64encode(path.read_bytes()).decode()
+            body.append(f'<figure><img src="data:image/png;base64,{encoded}" alt="{e(caption)}"><figcaption>{e(caption)}</figcaption></figure>')
+            md += [f'![Supporting chart]({path.relative_to(run_dir.resolve()).as_posix()})', '', caption, '']
+        evidence_body = paras([('Full explanation', ins['statement']), ('Strength', ins['strength']),
+                               ('Confidence', ins['confidence'])]) + lis(full) + lis(ins.get('caveats', []))
+        if ins.get('suggested_next_step'):
+            evidence_body += paras([('Analytical follow-up', ins['suggested_next_step'])])
+        body += [details('Full evidence and qualifications', evidence_body), '</section>']
+        finding_appendix += [f'### {title}', '', ins['statement'], '',
+                             f"Strength: {ins['strength']}; confidence: {ins['confidence']}", '']
+        finding_appendix += [f'- {x}' for x in full]
+        finding_appendix += [f'- Caveat: {x}' for x in ins.get('caveats', [])]
+        if ins.get('suggested_next_step'):
+            finding_appendix += [f"- Analytical follow-up: {ins['suggested_next_step']}"]
+        finding_appendix += ['']
+    if not draft.get('insights'):
+        reason = draft.get('no_findings_reason', 'No findings recorded.')
+        body.append(f'<p>{e(reason)}</p>'); md += [reason, '']
+    meta = [('Purpose', scope['purpose']), ('Decision supported', scope['decision_supported']),
+            ('Target', f"{scope['target']['column']}: {scope['target']['definition']}"),
+            ('Data', f"{prep.get('n_rows')} rows; unit = {scope['unit_of_analysis']}"),
+            ('Panel interpretation', panel_line(scope))]
+    context = scope.get('business_context', {})
+    meta += [(key.replace('_', ' ').capitalize(), value) for key, value in context.items()]
+    statistical_note = 'Statistical estimates show available n, confidence intervals and Benjamini-Hochberg q-values across recorded tests. Data-selected follow-ups remain exploratory.'
+    technical = ['<h3>Scope and methodology</h3>', paras(meta), f'<p>{e(statistical_note)}</p>', '<h3>Hypothesis verdicts</h3>']
+    md += ['## Technical appendix', ''] + [f'**{label}:** {_text(value)}  ' for label, value in meta if value]
+    md += ['', statistical_note, ''] + action_appendix + finding_appendix + ['### Hypothesis verdicts', '']
+    for verdict in review.get('hypothesis_verdicts', []):
+        title = f"{verdict['id']}: {verdict['verdict']}"
+        technical += [f'<h4>{e(title)}</h4><p>{e(verdict["reasoning"])}</p>']
+        md += [f'**{title}**', '', verdict['reasoning'], '']
+    for title, values in [('Limitations', draft.get('limitations', [])),
+                          ('Additional next steps', draft.get('next_steps', [])),
+                          ('Data preparation', prep.get('log', []))]:
+        technical += [f'<h3>{e(title)}</h3>', lis(values)]
+        md += [f'### {title}', ''] + [f'- {x}' for x in values] + ['']
+    technical.append(paras([('Data quality', dq.get('summary', 'n/a'))]))
+    md += [f"Data quality: {dq.get('summary', 'n/a')}", '']
+    judgments = draft.get('business_review', {})
+    if judgments:
+        values = [f"{area}: {j['status']} — {j['reason']}" for area, j in judgments.items()]
+        technical += ['<h3>Business review</h3>', lis(values)]
+        md += ['### Business review', ''] + [f'- {x}' for x in values] + ['']
+    runs = [f"{k} — {r['tool']}: {r.get('summary') or r.get('error')}" +
+            (f" (follow-up: {r['followup_reason']})" if r.get('followup_reason') else '') for k, r in sorted(results.items())]
+    runs += [f"{s['step_id']} — {s['tool']} (user-approved skip): {s.get('skip_reason')}"
+             for s in analyses.get('steps', []) if s.get('status') == 'skipped']
+    technical += ['<h3>Analyses run</h3>', lis(runs)]
+    md += ['### Analyses run', ''] + [f'- {x}' for x in runs]
+    body.append(details('Technical appendix: methods, limitations and audit trail', ''.join(technical)))
+    css = '''body{font-family:Segoe UI,Arial,sans-serif;max-width:1000px;margin:40px auto;padding:0 24px;color:#213547;line-height:1.6}
+    h1{font-size:2rem}h2{margin-top:2rem}h3{line-height:1.35}p,li{overflow-wrap:anywhere}
+    .executive{background:#eef5fa;border-left:5px solid #245f87;padding:16px 24px}.lead{font-size:1.2rem}
+    .action{border-top:2px solid #245f87;padding:20px 0}.tag{font-size:.85rem;text-transform:uppercase;color:#245f87;font-weight:700}
+    .finding{border-top:1px solid #ccd6de;padding:12px 0}.note{color:#526575;font-size:.95rem}
+    details{margin:16px 0;padding:12px;background:#f5f7f9}summary{cursor:pointer;font-weight:600}
+    figure{margin:20px 0}img{max-width:100%;height:auto}figcaption{color:#526575}
+    @media(max-width:600px){body{padding:0 16px;margin:20px auto}.executive{padding:12px}}
+    @media print{details{display:block}details>*{display:block}summary{display:block}.action,.finding{break-inside:avoid}}
+    '''
+    document = f'<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(scope["project_name"])}</title><style>{css}</style></head><body><main>{"".join(body)}</main></body></html>'
+    (run_dir / 'report.md').write_text('\n'.join(md) + '\n', encoding='utf-8')
+    (run_dir / 'report.html').write_text(document, encoding='utf-8')
+    return {'files': ['report.md', 'report.html'], 'n_insights': len(draft.get('insights', [])),
+            'n_charts': n_charts, 'schema_version': draft.get('schema_version', 1)}

@@ -17,3 +17,8 @@ assumptions, risks, success_metric, validation_plan. Proposals must acknowledge 
 limits and be framed as experiments when causal support is absent.
 Challenge missing mechanisms, wrong grain, exposure differences, unstable segments,
 repeated entities, rank deficiency, and overbroad null conclusions. Report unanswered questions.
+
+For new runs use business-reporting/SKILL.md and the v2 contract in docs/business-report-schema.md.
+Recommendations or no_recommendations_reason are required in v2. A completed business_review
+must assess decision clarity, actionability, evidence alignment, uncertainty and communication.
+Legacy v1 artifacts remain readable; do not silently invent missing business reasoning for them.

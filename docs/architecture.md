@@ -65,3 +65,16 @@ frequency differences with identical purchase amounts, temporal volume changes w
 amounts, accounting reconciliation, preserved identifiers, view grain, aggregate evidence access,
 category display invariance, p-value precision, and suppression of unidentified coefficients.
 The QVI example plan is a manual integration benchmark; keep source data and artifacts out of git.
+
+## Business decision and reporting contract
+The three roles share report schema v2; no fourth writer agent is introduced. Scoping captures
+business_context; the analyst proposes and compares actions; the reviewer independently assesses
+business usefulness and writes business_review. New scopes opt into report_schema_version 2 and
+cannot save a v1 insight draft. Legacy scopes/artifacts remain supported.
+
+The business-reporting skill adapts communication principles for reports. The Python validator
+checks structure, evidence references, selected charts and completed review, while semantic action
+quality remains an explicit reviewer responsibility. Factual rationale is screened for causal
+claims; mechanism hypotheses and test questions are separate fields. The renderer makes no LLM
+calls, invents no business reasoning and performs no new calculations. It renders selected
+registered charts only and preserves all cited evidence in detail. See business-report-schema.md.

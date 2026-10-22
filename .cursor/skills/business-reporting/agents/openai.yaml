@@ -1,0 +1,4 @@
+interface:
+  display_name: "Business Reporting"
+  short_description: "Turn analytical evidence into clear business decisions"
+  default_prompt: "Use $business-reporting to prepare an evidence-backed business report with concrete actions."

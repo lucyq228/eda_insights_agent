@@ -11,3 +11,6 @@ date_column, entity_column where applicable, views and max_followups. See exampl
 Preserve IDs/components even when excluded from predictors. Declare model drivers explicitly.
 Use descriptive decomposition before association screening. State data limits and assumptions.
 Substantive user questions go in user_questions; do not ask permission for routine analysis.
+For new scopes set report_schema_version: 2 and business_context {audience, decision,
+available_levers: [], constraints: [], success_measures: [], unknowns: []}. Unknown values
+are valid. Record inferred context as assumptions, never as confirmed stakeholder instructions.
