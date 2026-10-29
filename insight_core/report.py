@@ -16,7 +16,7 @@ def _results(run_dir: Path) -> dict:
 
 
 def _qmap(results: dict) -> dict:
-    mt = results.get("multiple-testing", {})
+    mt = (results.get("multiple-testing-adjustment") or results.get("multiple-testing") or {})
     return {(r["result"], r["label"]): r["q"] for r in mt.get("q_values", [])}
 
 

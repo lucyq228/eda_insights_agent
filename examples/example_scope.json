@@ -26,8 +26,8 @@
       "rationale": "Traffic is the most direct volume measure; it anchors the size of the other associations.",
       "support_criteria": "Spearman r > 0.3 with a CI excluding 0 and q < 0.05.",
       "pathway": [
-        {"tool": "target-associations", "params": {}, "purpose": "Rank every driver against sales."},
-        {"tool": "pair-deep-dive", "params": {"x": "foot_traffic"}, "purpose": "Look at the shape across traffic deciles."}
+        {"tool": "feature-target-associations", "params": {}, "purpose": "Rank every driver against sales."},
+        {"tool": "target-by-numeric-bins", "params": {"x": "foot_traffic"}, "purpose": "Look at the shape across traffic deciles."}
       ]
     },
     {
@@ -36,8 +36,8 @@
       "rationale": "Regions differ in both promo budgets and baseline sales, so the pooled number may mislead.",
       "support_criteria": "Within-region Spearman r > 0.1 with CI excluding 0; pooled and within compared.",
       "pathway": [
-        {"tool": "segment-correlation", "params": {"x": "promo_spend_k", "by": "region"}, "purpose": "Compare pooled vs within-region association."},
-        {"tool": "panel-decomposition", "params": {"x": "promo_spend_k"}, "purpose": "Split into within-store (same store, weeks with more vs less promo) and between-store (high- vs low-promo stores)."}
+        {"tool": "correlation-by-group", "params": {"x": "promo_spend_k", "by": "region"}, "purpose": "Compare pooled vs within-region association."},
+        {"tool": "within-between-correlation", "params": {"x": "promo_spend_k"}, "purpose": "Split into within-store (same store, weeks with more vs less promo) and between-store (high- vs low-promo stores)."}
       ]
     },
     {
@@ -55,7 +55,7 @@
       "rationale": "Availability is a lever; checking it net of traffic avoids reading busy-store effects as stock effects.",
       "support_criteria": "Partial Spearman r < -0.1 with CI excluding 0.",
       "pathway": [
-        {"tool": "partial-correlation", "params": {"x": "stockout_rate", "controls": ["foot_traffic", "region"]}, "purpose": "Association net of traffic and region."}
+        {"tool": "adjusted-correlation", "params": {"x": "stockout_rate", "controls": ["foot_traffic", "region"]}, "purpose": "Association net of traffic and region."}
       ]
     },
     {
@@ -65,8 +65,8 @@
       "support_criteria": "These three are in the top four by permutation importance; holdout R^2 > 0.3.",
       "pathway": [
         {"tool": "correlation-matrix", "params": {}, "purpose": "Check overlap between drivers."},
-        {"tool": "driver-importance", "params": {}, "purpose": "Joint importance and adjusted associations."},
-        {"tool": "panel-drivers", "params": {}, "purpose": "Which drivers move with sales within the same store over time, and which only separate stores."},
+        {"tool": "predictive-feature-importance", "params": {}, "purpose": "Joint importance and adjusted associations."},
+        {"tool": "within-between-regression", "params": {}, "purpose": "Which drivers move with sales within the same store over time, and which only separate stores."},
         {"tool": "time-trend", "params": {"freq": "M"}, "purpose": "Check for a seasonal pattern that could confound weekly comparisons."}
       ]
     }

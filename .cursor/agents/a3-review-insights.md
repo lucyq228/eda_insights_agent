@@ -25,3 +25,5 @@ units, denominators and evidence_type, not fabricated p-values/CIs. Rank by deci
 Each recommendation needs action, rationale, evidence, evidence_type, assumptions, risks,
 success_metric and validation_plan. Observed differences do not prove an intervention works.
 Return the answer to the agreed objective, tested/untested questions, limits and next actions.
+
+Use docs/tool-selection.md. Shared test_id values identify repeated evidence, not independent confirmation. Check population, grain, controls and method before treating differing results as discrepancies. Read the consolidated multiple-testing-adjustment q-values. Within/between and pooled/adjusted differences may answer different questions; lead with the comparison agreed in scope.

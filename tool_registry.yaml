@@ -2,24 +2,23 @@ tools:
   profile-dataset:
     phase: eda
     function: insight_core.tools_eda:profile_dataset
-    question: What is in this table? Column types, missingness, distributions, candidate
-      targets, ids, dates, segments.
+    question: What is in this table? Column types, missingness, distributions, candidate targets, ids,
+      dates, segments.
     outputs: profile.json, histograms, missingness chart
     caveats:
     - Types are inferred; the user confirms the target and its meaning.
   data-quality-check:
     phase: eda
     function: insight_core.tools_eda:data_quality_check
-    question: Is the data fit for the approved scope? Duplicates, key uniqueness,
-      target missingness and balance, outliers, cardinality, leakage.
+    question: Is the data fit for the approved scope? Duplicates, key uniqueness, target missingness and
+      balance, outliers, cardinality, leakage.
     target_types:
     - numeric
     - binary
     - categorical
     outputs: data_quality.json
     caveats:
-    - Leakage detection is heuristic (very high association or a name that overlaps
-      the target).
+    - Leakage detection is heuristic (very high association or a name that overlaps the target).
   eda-overview:
     phase: eda
     function: insight_core.tools_eda:eda_overview
@@ -32,19 +31,19 @@ tools:
   prepare-dataset:
     phase: prepare
     function: insight_core.tools_eda:prepare_dataset
-    question: Build the analysis table - dedupe, keep scoped columns, code the target,
-      parse dates, group rare levels.
+    question: Build the analysis table - dedupe, keep scoped columns, code the target, parse dates, group
+      rare levels.
     params:
       rare_level_share:
         type: float
         default: 0.01
         description: levels rarer than this share become 'Other'
     outputs: datasets/prepared.parquet, prepared_data.json
-  target-associations:
+  feature-target-associations:
     phase: analysis
-    function: insight_core.tools_analysis:target_associations
-    question: Which columns move with the target, and how strongly? One-at-a-time
-      screen of every driver, ranked.
+    function: insight_core.tools_analysis:feature_target_associations
+    question: Which columns move with the target, and how strongly? One-at-a-time screen of every driver,
+      ranked.
     target_types:
     - numeric
     - binary
@@ -56,24 +55,24 @@ tools:
       ci_top:
         type: int
         default: 3
-        description: compute report-grade confidence intervals only for this many
-          top-ranked drivers
+        description: compute report-grade confidence intervals only for this many top-ranked drivers
       view:
         type: str
         description: optional named aggregate view declared in scope.views
     cost_class: medium
-    method: Point estimates rank every scoped driver; report-grade confidence intervals
-      are added only to eligible top-ranked drivers.
+    method: Point estimates rank every scoped driver; report-grade confidence intervals are added only
+      to eligible top-ranked drivers.
     caveats:
     - Screening only - overlapping drivers share signal
     - and confounders are not removed.
-    - Drivers below ci_top and high-cardinality categorical drivers have point estimates
-      but no confidence interval until selected for a deep dive.
+    - Drivers below ci_top and high-cardinality categorical drivers have point estimates but no confidence
+      interval until selected for a deep dive.
+    use_when: Screen individual feature-target associations.
+    reuse: Deep dives reuse the same unadjusted test; they are not independent confirmation.
   correlation-matrix:
     phase: analysis
     function: insight_core.tools_analysis:correlation_matrix
-    question: Which numeric drivers overlap with each other (collinearity) and with
-      the target?
+    question: Which numeric drivers overlap with each other (collinearity) and with the target?
     target_types:
     - numeric
     - binary
@@ -90,12 +89,13 @@ tools:
         type: str
         description: optional named aggregate view declared in scope.views
     caveats:
-    - Descriptive; no findings enter the multiple-testing family.
-  pair-deep-dive:
+    - Descriptive; no findings enter the multiple-testing-adjustment family.
+    use_when: Inspect overlap among numeric drivers.
+    reuse: Descriptive matrix; does not add hypothesis tests.
+  target-by-numeric-bins:
     phase: analysis
-    function: insight_core.tools_analysis:pair_deep_dive
-    question: What does the relationship between one driver and the target look like
-      (binned means or group means)?
+    function: insight_core.tools_analysis:target_by_numeric_bins
+    question: How does the target vary across quantile bins of one numeric feature?
     target_types:
     - numeric
     - binary
@@ -109,21 +109,19 @@ tools:
         type: int
         default: 10
         description: quantile bins for a numeric driver
-      max_levels:
-        type: int
-        default: 10
-        description: for categorical drivers, keep up to the 10 most frequent levels
-          and combine the rest as Other
       view:
         type: str
         description: optional named aggregate view declared in scope.views
     cost_class: medium
     caveats:
-    - High-cardinality levels are selected by frequency
-    - never by their target result.
-  segment-breakdown:
+    - Bins are display summaries; the association is calculated on original rows.
+    needs:
+    - numeric_x
+    use_when: Inspect a numeric feature with a binned target profile.
+    reuse: Reuse the screen association; use nonlinearity-check only for an additional curvature question.
+  target-by-group:
     phase: analysis
-    function: insight_core.tools_analysis:segment_breakdown
+    function: insight_core.tools_analysis:target_by_group
     question: Does the target level differ across segments (e.g. region, plan, department)?
     target_types:
     - numeric
@@ -137,8 +135,7 @@ tools:
       max_levels:
         type: int
         default: 10
-        description: keep up to the 10 most frequent levels and combine the rest as
-          Other
+        description: keep up to the 10 most frequent levels and combine the rest as Other
       view:
         type: str
         description: optional named aggregate view declared in scope.views
@@ -147,11 +144,15 @@ tools:
     - Levels with n < min_n are shown but flagged.
     - High-cardinality levels are selected by frequency
     - never by their target result.
-  segment-correlation:
+    needs:
+    - categorical_by
+    use_when: Compare target levels or class proportions across categories.
+    reuse: Canonical categorical deep dive; do not also run legacy pair-deep-dive for this group.
+  correlation-by-group:
     phase: analysis
-    function: insight_core.tools_analysis:segment_correlation
-    question: Does a driver-target association hold within each segment, or is the
-      pooled number an artefact of segment mix (Simpson's paradox)?
+    function: insight_core.tools_analysis:correlation_by_group
+    question: Does a driver-target association hold within each segment, or is the pooled number an artefact
+      of segment mix (Simpson's paradox)?
     target_types:
     - numeric
     - binary
@@ -169,14 +170,17 @@ tools:
       view:
         type: str
         description: optional named aggregate view declared in scope.views
-    method: Spearman r pooled, per level, and within-segment (partial on segment dummies);
-      Cochran Q for heterogeneity.
+    method: Spearman r pooled, per level, and within-segment (partial on segment dummies); Cochran Q for
+      heterogeneity.
     caveats:
     - When pooled and within-segment disagree
     - lead with the within-segment result.
-  partial-correlation:
+    use_when: Compare a numeric feature-target correlation across groups and pooled versus within.
+    reuse: Reuse its combined within result instead of adjusted-correlation with only the same group on
+      the same rows.
+  adjusted-correlation:
     phase: analysis
-    function: insight_core.tools_analysis:partial_correlation
+    function: insight_core.tools_analysis:adjusted_correlation
     question: Does the association survive after holding other columns fixed?
     target_types:
     - numeric
@@ -197,11 +201,13 @@ tools:
         description: optional named aggregate view declared in scope.views
     caveats:
     - Only removes confounding by the listed controls; unmeasured confounders remain.
+    use_when: Adjust one numeric feature-target relationship for chosen numeric or categorical controls.
+    reuse: Run when adjustment is the main question or additional controls change the comparison.
   nonlinearity-check:
     phase: analysis
     function: insight_core.tools_analysis:nonlinearity_check
-    question: Is the relationship curved or threshold-like, so that a correlation
-      coefficient understates it?
+    question: Is the relationship curved or threshold-like, so that a correlation coefficient understates
+      it?
     target_types:
     - numeric
     - binary
@@ -219,13 +225,12 @@ tools:
       view:
         type: str
         description: optional named aggregate view declared in scope.views
-    method: Spearman vs Pearson, mutual information, quadratic term (dR^2 and p),
-      binned means.
+    method: Spearman vs Pearson, mutual information, quadratic term (dR^2 and p), binned means.
   time-trend:
     phase: analysis
     function: insight_core.tools_analysis:time_trend
-    question: How does the target move over time, and does a driver's period average
-      line up with it at lags 0..k?
+    question: How does the target move over time, and does a driver's period average line up with it at
+      lags 0..k?
     target_types:
     - numeric
     - binary
@@ -248,11 +253,11 @@ tools:
         description: optional named aggregate view declared in scope.views
     caveats:
     - Period-level correlations have few points; shared trends inflate them.
-  driver-importance:
+  predictive-feature-importance:
     phase: analysis
-    function: insight_core.tools_analysis:driver_importance
-    question: Taking all drivers together, which carry the most predictive signal,
-      and what are their adjusted associations?
+    function: insight_core.tools_analysis:predictive_feature_importance
+    question: Taking all drivers together, which carry the most predictive signal, and what are their
+      adjusted associations?
     target_types:
     - numeric
     - binary
@@ -268,20 +273,21 @@ tools:
       view:
         type: str
         description: optional named aggregate view declared in scope.views
-    method: Random forest permutation importance on a 25% holdout; standardized linear
-      coefficients with CI.
+    method: Random forest permutation importance on a 25% holdout; standardized linear coefficients with
+      CI.
     caveats:
     - Importance is predictive usefulness
     - not the result of changing a driver.
     - With an entity_column the holdout is whole entities
     - so the score reflects new entities.
-  panel-decomposition:
+    use_when: Measure joint predictive usefulness with random-forest permutation importance.
+    reuse: Linear coefficients are a separate model; they do not give the direction of random-forest importance.
+  within-between-correlation:
     phase: analysis
-    function: insight_core.tools_panel:panel_decomposition
-    question: For entities observed repeatedly (stores, restaurants, markets, customers),
-      is the association a within-entity pattern (the same entity in its higher vs
-      lower periods), a between-entity pattern (entities that are higher on average),
-      or both?
+    function: insight_core.tools_panel:within_between_correlation
+    question: For entities observed repeatedly (stores, restaurants, markets, customers), is the association
+      a within-entity pattern (the same entity in its higher vs lower periods), a between-entity pattern
+      (entities that are higher on average), or both?
     target_types:
     - numeric
     - binary
@@ -300,19 +306,20 @@ tools:
       view:
         type: str
         description: optional named aggregate view declared in scope.views
-    method: Spearman on ranks. Pooled r with entity-clustered CI; within r on ranks
-      demeaned by entity (and period) with entity-clustered CI; between r on entity
-      averages (n = entities).
+    method: Spearman on ranks. Pooled r with entity-clustered CI; within r on ranks demeaned by entity
+      (and period) with entity-clustered CI; between r on entity averages (n = entities).
     caveats:
     - Within removes stable differences between entities
     - not changes over time that move with the driver.
     - The between estimate rests on the number of entities
     - not rows.
-  panel-drivers:
+    use_when: Separate one association within and between repeated entities.
+    reuse: Use for entity-period dependence; ordinary grouping is not a replacement for clustered inference.
+  within-between-regression:
     phase: analysis
-    function: insight_core.tools_panel:panel_drivers
-    question: Taking all numeric drivers together, which move with the target within
-      entities over time, and which differ between entities?
+    function: insight_core.tools_panel:within_between_regression
+    question: Taking all numeric drivers together, which move with the target within entities over time,
+      and which differ between entities?
     target_types:
     - numeric
     - binary
@@ -329,17 +336,18 @@ tools:
       view:
         type: str
         description: optional named aggregate view declared in scope.views
-    method: Linear fixed-effects model on standardized values demeaned by entity (and
-      period) with entity-clustered CIs; holdout R^2 on held-out entities; a between
-      model on entity averages when there are enough entities.
+    method: Linear fixed-effects model on standardized values demeaned by entity (and period) with entity-clustered
+      CIs; holdout R^2 on held-out entities; a between model on entity averages when there are enough
+      entities.
     caveats:
     - Linear
     - so curves are missed; drivers fixed within an entity only have a between estimate.
-  multiple-testing:
+    use_when: Estimate within and between associations for numeric drivers jointly.
+    reuse: Coefficients are adjusted slopes, not predictive importance or causal effects.
+  multiple-testing-adjustment:
     phase: analysis
-    function: insight_core.tools_analysis:multiple_testing
-    question: Which findings survive Benjamini-Hochberg FDR across every test run
-      (plan and follow-ups)?
+    function: insight_core.tools_analysis:multiple_testing_adjustment
+    question: Which findings survive Benjamini-Hochberg FDR across every test run (plan and follow-ups)?
     target_types:
     - numeric
     - binary
@@ -349,14 +357,13 @@ tools:
   build-report:
     phase: report
     function: insight_core.report:build
-    question: Assemble the insight report (Markdown + self-contained HTML) from insights,
-      review, and results.
+    question: Assemble the insight report (Markdown + self-contained HTML) from insights, review, and
+      results.
     outputs: report.md, report.html
   business-summary:
     phase: analysis
     function: insight_core.tools_business:business_summary
-    question: 'Where do sales differences arise: customers, frequency, units, or product
-      mix?'
+    question: 'Where do sales differences arise: customers, frequency, units, or product mix?'
     target_types:
     - numeric
     needs: []
@@ -390,8 +397,7 @@ tools:
   period-comparison:
     phase: analysis
     function: insight_core.tools_business:period_comparison
-    question: How do four accounting components reconcile the sales difference between
-      two windows?
+    question: How do four accounting components reconcile the sales difference between two windows?
     target_types:
     - numeric
     needs:

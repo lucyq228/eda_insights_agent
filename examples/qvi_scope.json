@@ -119,7 +119,7 @@
       "support_criteria": "Report observed magnitudes and coverage; flag uncertainty and distinguish exploratory associations from causal evidence.",
       "pathway": [
         {
-          "tool": "segment-breakdown",
+          "tool": "target-by-group",
           "params": {
             "view": "customers",
             "by": "LIFESTAGE"

@@ -8,14 +8,14 @@ mandatory stages. Use actual columns and feasible parameters after profiling.
 | --- | --- | --- |
 | Retail: how do customers, visits, quantity and unit value reconcile sales? | Establish meaningful accounting components | business-summary |
 | Where are sales concentrated and which components explain group differences? | Separate group size from purchasing behavior | business-summary; declared aggregate views |
-| Which priority patterns warrant deeper investigation? | Follow observed gaps within agreed groups | Conditional pair-deep-dive / segment-breakdown |
+| Which priority patterns warrant deeper investigation? | Follow observed gaps within agreed groups | Conditional target-by-numeric-bins / target-by-group |
 | Are differences consistent across stores and periods? | Assess composition and exposure | temporal-diagnostics; panel tools only if suitable |
-| Housing: how do prices vary across the agreed market? | Establish the population and price distribution | automatic target overview; segment-breakdown |
-| Which property factors carry the strongest signals? | Prioritize individual and joint associations | target-associations; driver-importance |
-| Do those signals hold among similar homes, and where do curves appear? | Deepen under agreed location/size comparisons | Conditional partial-correlation / nonlinearity-check |
-| Attrition: what proportion left, and where are counts and rates concentrated? | Define the positive class, denominator and observation window | automatic target overview; segment-breakdown |
-| Which pre-departure factors carry the strongest signals? | Prioritize observed associations without outcome leakage | target-associations; driver-importance |
-| Do those relationships survive relevant controls and vary by group? | Assess consistency and actionable patterns | Conditional partial-correlation / segment-correlation |
+| Housing: how do prices vary across the agreed market? | Establish the population and price distribution | automatic target overview; target-by-group |
+| Which property factors carry the strongest signals? | Prioritize individual and joint associations | feature-target-associations; predictive-feature-importance |
+| Do those signals hold among similar homes, and where do curves appear? | Deepen under agreed location/size comparisons | Conditional adjusted-correlation / nonlinearity-check |
+| Attrition: what proportion left, and where are counts and rates concentrated? | Define the positive class, denominator and observation window | automatic target overview; target-by-group |
+| Which pre-departure factors carry the strongest signals? | Prioritize observed associations without outcome leakage | feature-target-associations; predictive-feature-importance |
+| Do those relationships survive relevant controls and vary by group? | Assess consistency and actionable patterns | Conditional adjusted-correlation / correlation-by-group |
 
 Housing prices must not be summed as sales. Attrition has no temporal pathway without dates;
 exit interviews are not pre-departure predictors. Retail unit value includes product mix.
@@ -31,7 +31,7 @@ All use cases end with evidence synthesis, limitations, and actions requiring va
   "support_criteria": "Compare direction, magnitude, uncertainty and coverage; an inconclusive result is valid.",
   "pathway": [],
   "followup_when": "Earlier screening finds a material relationship and scoped groups have adequate coverage; otherwise explain why this stage is not pursued.",
-  "candidate_tools": ["segment-correlation", "partial-correlation"]
+  "candidate_tools": ["correlation-by-group", "adjusted-correlation"]
 }
 ```
 

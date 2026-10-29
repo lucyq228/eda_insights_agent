@@ -10,7 +10,7 @@ from insight_core import data, stats, registry
 from insight_core.context import Ctx
 from insight_core.tools_business import business_summary, temporal_diagnostics, period_comparison
 from insight_core.tools_eda import prepare_dataset
-from insight_core.tools_analysis import pair_deep_dive, driver_importance
+from insight_core.tools_analysis import target_by_group, predictive_feature_importance
 from insight_core.views import build_view, validate_views
 from insight_core.runner import save_result
 from insight_core.scope import approve
@@ -77,7 +77,7 @@ def test_views_retain_grain_and_safe_ratios(ctx):
     assert validate_views(ctx.scope, data.profile(ctx.df)) == []
     view = build_view(ctx.df, ctx.scope, "customer")
     assert len(view) == 20 and view.ticket.eq(8).all()
-    check = registry.check_step("segment-breakdown", {"view": "customer", "by": "segment"}, ctx.scope, data.profile(ctx.df), [])
+    check = registry.check_step("target-by-group", {"view": "customer", "by": "segment"}, ctx.scope, data.profile(ctx.df), [])
     assert check["verdict"] != "blocked"
 
 
@@ -102,9 +102,9 @@ def test_display_cap_does_not_change_association(ctx, monkeypatch):
                            "sales": np.repeat(np.arange(15), 5).astype(float)})
     ctx.types = {"product": "categorical", "sales": "numeric"}
     monkeypatch.setattr(stats, "BOOT", 20)
-    result = pair_deep_dive(ctx, {"x": "product", "max_levels": 3})
+    result = target_by_group(ctx, {"by": "product", "max_levels": 3})
     assert result["findings"][0]["estimate"] == pytest.approx(1.)
-    assert len(result["tables"]["profile"]) == 4
+    assert len(result["tables"]["breakdown"]) == 4
 
 
 def test_rank_deficient_coefficients_are_suppressed(ctx):
@@ -113,7 +113,7 @@ def test_rank_deficient_coefficients_are_suppressed(ctx):
     ctx.df = pd.DataFrame({"x": x, "duplicate": x, "sales": x + rng.normal(size=100)})
     ctx.types = {c: "numeric" for c in ctx.df}
     ctx.drivers = ["x", "duplicate"]
-    result = driver_importance(ctx, {})
+    result = predictive_feature_importance(ctx, {})
     assert result["findings"] == []
     assert any("RANK DEFICIENT" in f for f in result["flags"])
 

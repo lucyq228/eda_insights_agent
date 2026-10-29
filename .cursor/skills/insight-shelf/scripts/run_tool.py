@@ -7,7 +7,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 
 from insight_core.locking import milestone_lock  # noqa: E402
 from insight_core.runner import (base_parser, compact, configure_stdout, emit_json, execute,  # noqa: E402
-                                 read_json_file, refresh_multiple_testing, resolve, write_analyses_index)
+                                 read_json_file, refresh_multiple_testing_adjustment, resolve, write_analyses_index)
 from insight_core.state import milestone_done  # noqa: E402
 
 
@@ -29,7 +29,7 @@ def main() -> None:
         record = execute(run_dir, args.tool, params, label, args.actor, followup_reason=args.followup_reason, hypothesis=args.hypothesis)
         if record.get("error"):
             emit_json(compact(record) | {"reasons": record.get("reasons", [])}, ok=False)
-        mt = refresh_multiple_testing(run_dir, args.actor)
+        mt = refresh_multiple_testing_adjustment(run_dir, args.actor)
         index = write_analyses_index(run_dir)
         emit_json({"result": compact(record), "findings": record.get("findings", [])[:8],
                    "multiple_testing": mt.get("summary"), "index_errors": index["errors"]})

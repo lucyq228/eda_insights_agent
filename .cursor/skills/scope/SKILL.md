@@ -27,5 +27,5 @@ Resolve them using actual user answers and reflect decisions in the final scope,
 All new scopes require confirmation of the presented version. Routine analysis within it does not.
 
 The target overview runs automatically in the post-confirmation data-quality stage. Do not put
-eda-overview, profiling, preparation, multiple-testing or reporting tools into an analysis pathway.
+eda-overview, profiling, preparation, multiple-testing-adjustment or reporting tools into an analysis pathway.
 Initial pathways and candidate_tools must name selectable analysis tools from read_context.py.

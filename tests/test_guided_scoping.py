@@ -21,10 +21,10 @@ def proposal():
         "hypotheses": [
             {"id": "H1", "statement": "What does the outcome look like?", "rationale": "Establish a baseline",
              "support_criteria": "Describe distribution and coverage", "pathway": [
-                 {"tool": "target-associations", "params": {}, "purpose": "Baseline"}]},
+                 {"tool": "feature-target-associations", "params": {}, "purpose": "Baseline"}]},
             {"id": "H2", "statement": "Where should we deepen?", "rationale": "Explain material patterns",
              "support_criteria": "Evaluate relevant relationships or explain limits", "pathway": [],
-             "followup_when": "Baseline shows sufficient coverage", "candidate_tools": ["pair-deep-dive"]}
+             "followup_when": "Baseline shows sufficient coverage", "candidate_tools": ["target-by-numeric-bins"]}
         ], "out_of_scope": ["Causal effects"], "user_questions": []}
 
 
@@ -39,7 +39,7 @@ def test_scope_table_and_initial_manifest(kind):
     assert [x["hypothesis"] for x in registry.plan_steps(s)] == ["H1"]
     text = proposal_markdown(s, 2)
     assert text.index(s["hypotheses"][0]["statement"]) < text.index(s["hypotheses"][1]["statement"])
-    assert "conditional" in text and "pair-deep-dive" in text and "Causal effects" in text
+    assert "conditional" in text and "target-by-numeric-bins" in text and "Causal effects" in text
     bad = copy.deepcopy(s)
     bad["hypotheses"][1].pop("followup_when")
     assert any("followup_when" in e for e in validate(bad, data.profile(df))[0])
@@ -66,9 +66,9 @@ def test_confirmation_and_followup_handoff(tmp_path):
     run("run-insights-project", "advance_run")
     assert not list((run.dir / "results").glob("H2*.json"))
     params = run.draft("params.json", {"x": "x"})
-    run("insight-shelf", "run_tool", "--tool", "pair-deep-dive", "--params-file", params,
+    run("insight-shelf", "run_tool", "--tool", "target-by-numeric-bins", "--params-file", params,
         "--hypothesis", "UNKNOWN", "--followup-reason", "Check coverage", ok=False)
-    run("insight-shelf", "run_tool", "--tool", "pair-deep-dive", "--params-file", params,
+    run("insight-shelf", "run_tool", "--tool", "target-by-numeric-bins", "--params-file", params,
         "--hypothesis", "H2", "--followup-reason", "H1 establishes sufficient coverage")
     result = json.loads((run.dir / "results" / "F1.json").read_text())
     assert result["hypothesis"] == "H2"

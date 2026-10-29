@@ -12,7 +12,7 @@ from . import stats
 from .context import Ctx
 from .state import sha
 
-CACHE_VERSION = 2
+CACHE_VERSION = 3
 
 
 def associate_cached(ctx: Ctx, column: str, x_type: str, *, with_interval: bool,

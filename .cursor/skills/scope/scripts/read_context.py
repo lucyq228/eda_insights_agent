@@ -52,7 +52,7 @@ def main() -> None:
     out["tool_shelf"] = [{"id": t["id"], "question": t["question"], "target_types": t["target_types"],
                           "needs": t["needs"], "params": t["params"], "cost_class": t["cost_class"],
                           "caveats": t["caveats"]} for t in registry.catalogue("analysis")
-                         if t["id"] != "multiple-testing"]
+                         if t["id"] != "multiple-testing-adjustment"]
     emit_json(out)
 
 

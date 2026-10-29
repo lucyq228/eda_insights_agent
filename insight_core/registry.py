@@ -12,6 +12,32 @@ from .paths import REGISTRY
 USABLE_TYPES = ("numeric", "binary", "categorical")
 
 
+ALIASES = {
+    "target-associations": "feature-target-associations",
+    "pair-deep-dive": "target-by-numeric-bins",
+    "segment-breakdown": "target-by-group",
+    "segment-correlation": "correlation-by-group",
+    "partial-correlation": "adjusted-correlation",
+    "driver-importance": "predictive-feature-importance",
+    "panel-decomposition": "within-between-correlation",
+    "panel-drivers": "within-between-regression",
+    "multiple-testing": "multiple-testing-adjustment",
+}
+
+
+def canonical(tool_id: str) -> str:
+    return ALIASES.get(tool_id, tool_id)
+
+
+def resolve_call(tool_id: str, params: dict, types: dict) -> tuple[str, dict]:
+    """Translate legacy calls without changing approved scope snapshots."""
+    if tool_id == "pair-deep-dive" and types.get(params.get("x")) in ("categorical", "binary"):
+        return "target-by-group", {"by": params["x"], **{k: v for k, v in params.items() if k not in ("x", "bins")}}
+    if tool_id == "pair-deep-dive":
+        params = {k: v for k, v in params.items() if k != "max_levels"}
+    return canonical(tool_id), dict(params)
+
+
 @lru_cache(maxsize=1)
 def load() -> dict:
     return yaml.safe_load(REGISTRY.read_text(encoding="utf-8"))["tools"]
@@ -19,6 +45,7 @@ def load() -> dict:
 
 def get(tool_id: str) -> dict:
     tools = load()
+    tool_id = canonical(tool_id)
     if tool_id not in tools:
         raise KeyError(f"unknown tool '{tool_id}'; see list_tools.py")
     return tools[tool_id]
@@ -32,6 +59,7 @@ def function(tool_id: str):
 def catalogue(phase: str | None = None) -> list[dict]:
     return [{"id": k, "phase": v["phase"], "question": v["question"], "target_types": v.get("target_types", []),
              "needs": v.get("needs", []), "params": {p: spec.get("description", "") for p, spec in v.get("params", {}).items()},
+             "use_when": v.get("use_when", v["question"]), "reuse": v.get("reuse", ""),
              "cost_class": v.get("cost_class", "low"), "caveats": v.get("caveats", [])}
             for k, v in load().items() if phase in (None, v["phase"])]
 
@@ -73,13 +101,14 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
             leakage = []  # Raw column leakage does not describe derived metrics.
         except (KeyError, ValueError) as exc:
             return {"verdict": "blocked", "reasons": [str(exc)], "warnings": []}
+    tool_id, params = resolve_call(tool_id, params, {c["name"]: c["type"] for c in profile["columns"]})
     reasons, warnings = [], []
     try:
         tool = get(tool_id)
     except KeyError as exc:
         return {"verdict": "blocked", "reasons": [str(exc)], "warnings": []}
-    if tool_id == "multiple-testing":
-        return {"verdict": "blocked", "reasons": ["multiple-testing runs automatically; do not add it as a step"], "warnings": []}
+    if tool_id == "multiple-testing-adjustment":
+        return {"verdict": "blocked", "reasons": ["multiple-testing-adjustment runs automatically; do not add it as a step"], "warnings": []}
     if tool["phase"] != "analysis":
         return {"verdict": "blocked", "reasons": [f"{tool_id} is a {tool['phase']} tool, not an analysis step"], "warnings": []}
     cols = _profile_columns(profile)
@@ -141,9 +170,11 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
                 warnings.append("no date_column, so period-wide swings are not removed from the within estimate")
     elif ent and tool_id != "correlation-matrix":
         warnings.append(f"panel data: this tool pools all {ent} rows and its CIs treat them as independent; "
-                        "compare with panel-decomposition or panel-drivers")
+                        "compare with within-between-correlation or within-between-regression")
 
     by = params.get("by")
+    if "categorical_by" in tool.get("needs", []) and by in cols and cols[by]["type"] not in ("categorical", "binary"):
+        reasons.append("target-by-group requires categorical groups; use target-by-numeric-bins for numeric features")
     if by and by in cols:
         shown_levels = cols[by].get("levels", [])
         levels = [lv for lv in shown_levels if lv["count"] >= min_n]

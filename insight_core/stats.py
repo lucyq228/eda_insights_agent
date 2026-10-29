@@ -6,6 +6,9 @@ Every measure returns the same finding shape:
 
 from __future__ import annotations
 
+import hashlib
+import json
+
 import numpy as np
 import pandas as pd
 from scipy import stats
@@ -137,6 +140,7 @@ def _associate(x: pd.Series, y: pd.Series, x_type: str, y_type: str, alpha: floa
         lo, hi = _boot_ci(_cramers_v, a, b, alpha=alpha) if with_interval else (np.nan, np.nan)
         out = {"metric": "cramers_v", "estimate": v, "ci_low": lo, "ci_high": hi, "p": p, "n": n,
                "direction": "see breakdown"}
+    out["test_id"] = test_identity("association:" + x_type + ":" + y_type, d, [x.name, y.name])
     return _round(out)
 
 
@@ -176,3 +180,16 @@ def design(df: pd.DataFrame, cols: list[str], types: dict[str, str]) -> pd.DataF
         else:
             parts.append(pd.get_dummies(df[c].astype(str), prefix=c, drop_first=True, dtype=float))
     return pd.concat(parts, axis=1) if parts else pd.DataFrame(index=df.index)
+
+
+def test_identity(method: str, data: pd.DataFrame, specification: list) -> str:
+    """Identify the exact sample and test, independently of display/tool names."""
+    digest = hashlib.sha256(pd.util.hash_pandas_object(data, index=True).values.tobytes()).hexdigest()
+    return hashlib.sha256(json.dumps([method, specification, digest], default=str).encode()).hexdigest()
+
+
+def adjusted_test_id(x, y, data, controls, types):
+    controls = sorted(set(controls))
+    frame = data[[x.name, y.name] + controls]
+    return test_identity("partial-spearman", frame,
+                         [x.name, y.name, [(c, types.get(c)) for c in controls]])
