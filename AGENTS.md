@@ -7,10 +7,10 @@ live in insight_core/ and are exposed through tool_registry.yaml and CLI skills.
 Lifecycle: request -> profile -> scope + feasibility -> activate -> analyst investigation
 -> independent review / targeted follow-ups -> evidence-backed report.
 
-- Broad EDA uses exploratory mode. A clear user request authorizes routine read-only
-  exploration; no repeated approval or fixed hypothesis/insight counts.
-- Confirmatory mode retains explicit approval. Material new objectives, datasets,
-  external actions or excluded data require a scope decision. Never fabricate consent.
+- Broad EDA uses exploratory mode. Present a sequential scope table, guide the user with
+  recommended defaults, and obtain confirmation once before substantive analysis in either mode.
+- Routine follow-ups inside the confirmed boundaries need reasons, not repeated approval.
+  New objectives, datasets, populations or excluded factors need a new scoped run. Never fabricate consent.
 - Scope snapshots remain immutable and hashed. Declared views and reasoned follow-ups
   permit adaptation without silently changing the objective. A genuinely new scope is a new run.
 - Preserve the clean base table, original categories, IDs and metric components.

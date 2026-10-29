@@ -20,7 +20,7 @@ def main() -> None:
     args = p.parse_args()
     run_dir = resolve(args)
     if not args.force and milestone_done(run_dir, "analyses"):
-        emit_json({"summary": "approved analysis plan already complete", "next": "review"})
+        emit_json({"summary": "approved analysis plan already complete", "next": "Analyst: inspect evidence and address scoped adaptive questions, then request review"})
     scope = load_approved(run_dir)
     if not milestone_done(run_dir, "prepared_data"):
         emit_json({"error": "prepared data is missing or stale; run prepare_data.py first"}, ok=False)
@@ -39,7 +39,7 @@ def main() -> None:
         mt = refresh_multiple_testing(run_dir, args.actor)
         index = write_analyses_index(run_dir)
         emit_json({"steps": out, "multiple_testing": mt.get("summary"), "errors": index["errors"],
-                   "next": "review" if not index["errors"] else "report the errors to the coordinator"},
+                   "next": "Analyst: inspect evidence and address scoped adaptive questions, then request review" if not index["errors"] else "report the errors to the coordinator"},
                   ok=not index["errors"])
 
 

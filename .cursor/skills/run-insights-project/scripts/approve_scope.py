@@ -13,7 +13,7 @@ from insight_core.scope import approve  # noqa: E402
 def main() -> None:
     configure_stdout()
     p = base_parser(__doc__, "coordinator")
-    p.add_argument("--exploration", action="store_true", help="activate a feasible exploratory scope under the original request")
+    p.add_argument("--exploration", action="store_true", help="deprecated compatibility flag; user confirmation is still required")
     p.add_argument("--user-confirmation", default="", help="the user's approval, quoted verbatim")
     args = p.parse_args()
     run_dir = resolve(args)

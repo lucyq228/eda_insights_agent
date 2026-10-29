@@ -3,8 +3,7 @@ description: Evidence and execution boundaries for the three-agent insights work
 alwaysApply: true
 ---
 Follow AGENTS.md. User intent governs the objective; never fabricate user answers.
-Exploratory runs can activate from the original request after feasibility. Confirmatory
-runs require explicit approval. Routine exploratory follow-ups need a recorded reason,
+Present the scope proposal and await user confirmation after feasibility for every new run. Routine exploratory follow-ups need a recorded reason,
 not repeated approval. Honor the run budget and scope exclusions.
 Keep scope snapshots immutable. Preserve raw column identities in the clean base table.
 Use shared calculation scripts. Read aggregate JSON previews or read_evidence.py pages;

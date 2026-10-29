@@ -73,11 +73,12 @@ def challenges(run_dir: Path) -> dict:
     by_h = {}
     for h in scope["hypotheses"]:
         by_h[h["id"]] = {"statement": h["statement"], "support_criteria": h["support_criteria"],
+                         "rationale": h["rationale"], "followup_when": h.get("followup_when"),
                          "results": [x["result"] for x in per_result if x["hypothesis"] == h["id"]],
                          "skipped_steps": [{"step_id": s["step_id"], "reason": waivers[s["step_id"]]["reason"]}
                                            for s in registry.plan_steps(scope)
                                            if s["hypothesis"] == h["id"] and s["step_id"] in waivers]}
-    prompts = ["Have customer counts, frequency, quantity, mix and temporal changes been checked or explicitly marked unavailable?",
+    prompts = ["Have the agreed sequential questions been answered, or their conditional triggers and data gaps explained?",
                "Does each claim state its aggregation, denominator, population and observational limits?",
                "Read aggregate result tables; a null trend is not evidence of no temporal patterns.","Does the pooled result survive within segments? Lead with within-segment when they differ.",
                "Is a weak correlation hiding a curve (nonlinearity flags)?",
@@ -130,8 +131,12 @@ def validate_review(draft: dict, run_dir: Path) -> list[str]:
         if not v.get("reasoning"):
             errs.append(f"{where}: needs reasoning")
         all_skipped = bool(hypothesis_steps.get(v.get("id"))) and hypothesis_steps[v.get("id")].issubset(waivers)
+        adaptive = next((h for h in scope["hypotheses"] if h["id"] == v.get("id")
+                         and not h.get("pathway") and h.get("followup_when")), None)
         if v.get("verdict") == "not_evaluated":
-            if not all_skipped:
+            if adaptive:
+                errs += _check_evidence(v.get("evidence", []), results, where)
+            elif not all_skipped:
                 errs.append(f"{where}: not_evaluated is allowed only when all of the hypothesis's steps were user-approved skips")
         else:
             errs += _check_evidence(v.get("evidence", []), results, where)

@@ -11,8 +11,9 @@ and independent review. The workflow supports exploratory discovery and prespeci
 - Segment intersections and temporal diagnostics expose patterns hidden by marginal correlations.
 - Named aggregate views support customer or store-period analysis with explicit metric definitions.
 - Agents can read bounded aggregate evidence; no raw personal rows are printed.
-- Exploratory runs activate from the user request after feasibility. Routine follow-ups need reasons,
-  not repeated approval. Confirmatory scopes retain explicit confirmation.
+- Present a sequential question / purpose / tools table and confirm the scope once before analysis.
+- Initial calculations run first; evidence-driven follow-ups stay inside the agreed boundaries.
+  Routine follow-ups need reasons, not repeated approval.
 - No required number of hypotheses or insights. Recommendations need evidence, assumptions,
   risks, a success metric and a validation plan.
 
@@ -47,3 +48,14 @@ coefficients are available for appropriate questions. Data-selected follow-ups r
 
 Run artifacts are hashed and stored under runs/ (gitignored). No external service is required
 for calculation; Cursor hosts the agent reasoning. Legacy confirmatory scopes remain supported.
+
+## Guided scoping
+
+The Scope Agent recommends defaults when the goal is broad, presents `scope_proposal.md`,
+and waits for confirmation. The table is rendered from the same `hypotheses` used by execution
+and review. Empty pathways with `followup_when` describe conditional exploration; their candidate
+tools do not run automatically. See [scoping examples](docs/scoping-examples.md).
+
+New scopes require `approve_scope.py --user-confirmation "<actual user reply>"`, including
+exploratory scopes. The legacy `--exploration` flag no longer bypasses confirmation. Existing
+locked runs remain readable. No additional package or agent is required.

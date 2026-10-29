@@ -123,6 +123,8 @@ def test_exploration_activation_does_not_fabricate_consent(ctx):
     write_artifact(ctx.run_dir, "scope_proposal.json", {"scope": scope, "version": 1})
     write_artifact(ctx.run_dir, "feasibility.json", {"steps": [], "scope_issues": []}, upstream="scope_proposal.json")
     write_artifact(ctx.run_dir, "run.json", {"request": "Explore sales", "data_sha256": "test"})
-    result = approve(ctx.run_dir, exploration=True)
-    assert result["user_confirmation"] == ""
-    assert result["authorization"] == "user_requested_exploration"
+    with pytest.raises(ValueError, match="explicit approval"):
+        approve(ctx.run_dir, exploration=True)
+    result = approve(ctx.run_dir, "Use the proposed scope", exploration=True)
+    assert result["user_confirmation"] == "Use the proposed scope"
+    assert result["authorization"] == "explicit_confirmation"

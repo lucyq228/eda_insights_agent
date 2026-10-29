@@ -11,11 +11,22 @@ No extra coordinator agent is needed. The main chat handles coordination as part
 
 ## Activation and adaptation
 
-Scopes use mode exploratory or confirmatory (legacy default). A feasible exploratory scope can
-activate with approve_scope.py --exploration under the recorded original request. Its authorization
-is user_requested_exploration and user_confirmation is empty. Confirmatory scopes still require a
-real approval quote. Substantive unanswered questions block either path. Never infer approval of
-external actions or a genuinely different objective from exploratory authorization.
+Scopes use mode exploratory or confirmatory (legacy default). Both require confirmation of the
+presented proposal after feasibility. The main chat renders the ordered question/purpose/tools table
+from scope_proposal.md, explains gaps/defaults and waits for input. Revisions require fresh feasibility.
+Substantive unanswered questions block activation. --exploration remains a compatibility argument,
+but does not authorize activation without an actual user confirmation quote.
+
+The existing hypotheses list is the single plan. Nonempty pathways form the initial manifest.
+Exploratory questions with an empty pathway require followup_when and may list candidate_tools.
+These conditional questions do not enter the initial manifest; the analyst chooses concrete registered
+follow-ups based on evidence, associates them with the question ID and respects the existing budget.
+The reviewer gives every question a verdict; an unpursued adaptive question needs reasoning and
+supporting evidence for not_evaluated. Synthesis may use evidence from earlier questions.
+
+Choose methods by metric semantics, not just numeric type: accounting only for reconcilable
+components, denominators for rates, driver domains for other outcomes. Dates/repeated entities
+are prerequisites for temporal/panel paths. Do not promise capabilities absent from the registry.
 
 The active scope stays hashed and immutable. It declares roles, views, initial questions, exclusions
 and max_followups (default 12). Additional registered calculations use --followup-reason; their

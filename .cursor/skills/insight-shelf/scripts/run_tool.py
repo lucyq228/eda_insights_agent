@@ -15,6 +15,7 @@ def main() -> None:
     configure_stdout()
     p = base_parser(__doc__, "coordinator")
     p.add_argument("--tool", required=True)
+    p.add_argument("--hypothesis", help="approved question ID this follow-up addresses")
     p.add_argument("--params-file", help="JSON file with the tool params")
     p.add_argument("--followup-reason", required=True, help="why this analysis is needed (shown in the report)")
     args = p.parse_args()
@@ -25,7 +26,7 @@ def main() -> None:
         params = read_json_file(args.params_file) if args.params_file else {}
         n = len(list((run_dir / "results").glob("F*.json"))) + 1
         label = f"F{n}"
-        record = execute(run_dir, args.tool, params, label, args.actor, followup_reason=args.followup_reason)
+        record = execute(run_dir, args.tool, params, label, args.actor, followup_reason=args.followup_reason, hypothesis=args.hypothesis)
         if record.get("error"):
             emit_json(compact(record) | {"reasons": record.get("reasons", [])}, ok=False)
         mt = refresh_multiple_testing(run_dir, args.actor)

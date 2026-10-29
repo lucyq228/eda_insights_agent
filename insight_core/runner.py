@@ -115,11 +115,13 @@ def compact(record: dict) -> dict:
 
 
 def execute(run_dir: Path, tool_id: str, params: dict, label: str, actor: str, step: dict | None = None,
-            followup_reason: str | None = None) -> dict:
+            followup_reason: str | None = None, hypothesis: str | None = None) -> dict:
     """Run one analysis tool under the locked scope. Refuses blocked steps."""
     scope = load_approved(run_dir)
     if step is None and not followup_reason and tool_id != "multiple-testing":
         refuse("analyses outside the approved plan need --followup-reason")
+    if hypothesis and (not followup_reason or hypothesis not in {h["id"] for h in scope["hypotheses"]}):
+        refuse("follow-up hypothesis must name a question in the approved scope and needs a reason")
     if followup_reason:
         existing = [json.loads(p.read_text()) for p in (run_dir / "results").glob("*.json")]
         count = sum(bool(r.get("followup_reason")) for r in existing if r.get("label") != label)
@@ -153,7 +155,7 @@ def execute(run_dir: Path, tool_id: str, params: dict, label: str, actor: str, s
             refuse(f"view {name} has only {len(df)} rows; below min_n")
     drivers = [c for c in registry.resolved_drivers(scope, profile) if c in df.columns]
     ctx = Ctx(run_dir=run_dir, df=df, types=types, scope=scope, label=label, drivers=drivers)
-    run_meta = {"step_id": (step or {}).get("step_id"), "hypothesis": (step or {}).get("hypothesis"),
+    run_meta = {"step_id": (step or {}).get("step_id"), "hypothesis": hypothesis or (step or {}).get("hypothesis"),
                 "purpose": (step or {}).get("purpose"), "followup_reason": followup_reason,
                 "view": params.get("view"), "unit_of_analysis": scope["unit_of_analysis"],
                 "analysis_mode": scope.get("mode", "confirmatory")}
