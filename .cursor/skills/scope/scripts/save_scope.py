@@ -33,6 +33,7 @@ def main() -> None:
                                                    "note": args.change_note or ("first draft" if version == 1 else "revision")}]
     write_artifact(run_dir, "scope_proposal.json", {"version": version, "scope": draft, "warnings": warnings,
                                                     "history": history})
+    (run_dir / "scope_proposal.md").write_text(scope.proposal_markdown(draft, version), encoding="utf-8")
     events.emit(run_dir, "scope saved", args.actor, f"version {version}: target={draft['target']['column']}; "
                 f"{len(draft['hypotheses'])} hypotheses; {len(draft.get('user_questions', []))} questions")
     emit_json({"version": version, "target": draft["target"]["column"], "hypotheses": [h["id"] for h in draft["hypotheses"]],

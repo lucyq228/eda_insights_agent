@@ -47,7 +47,7 @@ def main() -> None:
         if stage == args.through:
             break
     emit_json({"summary": f"advanced through {args.through}", "stages": completed,
-               "next": "review-insights specialist" if args.through == "analyses" else "continue deterministic execution"})
+               "next": "Analyst: read aggregate evidence, address scoped adaptive questions within budget, then request review" if args.through == "analyses" else "continue deterministic execution"})
 
 
 if __name__ == "__main__":

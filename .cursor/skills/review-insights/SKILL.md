@@ -5,7 +5,10 @@ description: Independently review business coverage, statistical evidence and pr
 Use review_checks.py, save_review.py --file <draft>, save_insights.py --file <draft>, build_report.py.
 Read result JSON and aggregate tables via insight-shelf/scripts/read_evidence.py.
 Review every planned question. Verdicts: supported, partially_supported, not_supported,
-inconclusive; not_evaluated is reserved for user-waived steps. Follow-ups have a tool,
+inconclusive; not_evaluated covers user-waived steps or an adaptive question not pursued.
+For adaptive questions, cite evidence and explain why its trigger did not warrant more work
+or why the budget/data prevented it. Check all agreed questions, not a sales-only checklist.
+Follow-ups have a tool,
 params and reason; they keep review open until the analyst executes them.
 
 insights.json contains headline_summary, insights, limitations, next_steps and optional

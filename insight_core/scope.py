@@ -56,11 +56,29 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
     ids = [h.get("id") for h in scope["hypotheses"]]
     if len(ids) != len(set(ids)):
         errors.append("hypothesis ids must be unique")
+    if not any(h.get("pathway") for h in scope["hypotheses"]):
+        errors.append("scope needs at least one initial calculation before adaptive follow-ups")
     tools = registry.load()
     for h in scope["hypotheses"]:
-        for key in ("id", "statement", "rationale", "support_criteria", "pathway"):
+        for key in ("id", "statement", "rationale", "support_criteria"):
             if not h.get(key):
                 errors.append(f"{h.get('id', '?')}: missing '{key}'")
+        if not isinstance(h.get("pathway"), list):
+            errors.append(f"{h.get('id')}: pathway must be a list")
+            continue
+        if not h["pathway"] and not h.get("followup_when"):
+            errors.append(f"{h.get('id')}: an adaptive question needs followup_when")
+        if not h["pathway"] and scope.get("mode", "confirmatory") != "exploratory":
+            errors.append(f"{h.get('id')}: adaptive questions require exploratory mode")
+        candidates = h.get("candidate_tools", [])
+        if not isinstance(candidates, list):
+            errors.append(f"{h.get('id')}: candidate_tools must be a list")
+        else:
+            for tool in candidates:
+                if tool not in tools:
+                    errors.append(f"{h.get('id')}: unknown candidate tool '{tool}'")
+                elif tools[tool].get("phase") != "analysis" or tool == "multiple-testing":
+                    errors.append(f"{h.get('id')}: candidate tool '{tool}' is not a selectable analysis tool")
         for step in h.get("pathway", []):
             if step.get("tool") not in tools:
                 errors.append(f"{h.get('id')}: unknown tool '{step.get('tool')}'")
@@ -89,7 +107,7 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
 
 
 def approve(run_dir: Path, confirmation: str = "", *, exploration: bool = False) -> dict:
-    if not exploration and (not confirmation or len(confirmation.strip()) < 2):
+    if not confirmation or len(confirmation.strip()) < 2:
         raise ValueError("quote the user's explicit approval in --user-confirmation")
     if (run_dir / "approved_scope.json").exists():
         raise ValueError("this run already has an approved scope; a different scope needs a new run")
@@ -97,13 +115,6 @@ def approve(run_dir: Path, confirmation: str = "", *, exploration: bool = False)
     feas = read_artifact(run_dir, "feasibility.json")
     if not proposal:
         raise ValueError("no scope proposal")
-    if exploration:
-        if proposal["scope"].get("mode") != "exploratory":
-            raise ValueError("automatic activation is only for exploratory scopes")
-        if not (read_artifact(run_dir, "run.json") or {}).get("request"):
-            raise ValueError("exploration needs the original user request")
-        confirmation = ""  # Never manufacture a user approval quote.
-
     if not feas or (feas.get("upstream") or {}).get("sha256") != sha(run_dir / "scope_proposal.json"):
         raise ValueError("feasibility is missing or stale; rerun feasibility on the current scope")
     blocked = [s["step_id"] for s in feas["steps"] if s["final_verdict"] == "blocked"]
@@ -116,7 +127,7 @@ def approve(run_dir: Path, confirmation: str = "", *, exploration: bool = False)
     if open_q:
         raise ValueError(f"unanswered user questions: {open_q}")
     approved = {**proposal["scope"], "version": proposal["version"], "answers": answers,
-                "authorization": "user_requested_exploration" if exploration else "explicit_confirmation",
+                "authorization": "explicit_confirmation",
                 "approved_at": datetime.now().isoformat(timespec="seconds"), "user_confirmation": confirmation.strip()}
     write_artifact(run_dir, "approved_scope.json", approved)
     lock = {"sha256": sha(run_dir / "approved_scope.json"), "data_sha256": read_artifact(run_dir, "run.json")["data_sha256"]}
@@ -127,10 +138,42 @@ def approve(run_dir: Path, confirmation: str = "", *, exploration: bool = False)
 def load_approved(run_dir: Path) -> dict:
     lock = read_artifact(run_dir, "scope.lock.json")
     if not lock:
-        refuse("no active scope; activate exploration or obtain confirmatory approval first")
+        refuse("no active scope; present the proposal and obtain user confirmation first")
     if lock["sha256"] != sha(run_dir / "approved_scope.json"):
         refuse("approved_scope.json changed after approval; refusing to run (start a new run)")
     run = read_artifact(run_dir, "run.json")
     if sha(Path(run["data_path"])) != lock["data_sha256"]:
         refuse("the dataset file changed after approval; start a new run")
     return read_artifact(run_dir, "approved_scope.json")
+
+
+def proposal_markdown(scope: dict, version: int) -> str:
+    """Render the same ordered questions used by execution and review; no second plan."""
+    def cell(value):
+        return str(value).replace("|", "\\|").replace("\n", " ")
+
+    lines = [f"# Proposed scope (version {version})", "", scope["purpose"], "",
+             f"Decision supported: {scope['decision_supported']}", "",
+             f"Target: {scope['target']['definition']}",
+             f"Unit of analysis: {scope['unit_of_analysis']}", "",
+             "| Questions to resolve, in sequence | Why this matters / purpose | Planned tools |",
+             "| --- | --- | --- |"]
+    for i, h in enumerate(scope["hypotheses"], 1):
+        tools = list(dict.fromkeys(s["tool"] for s in h["pathway"]))
+        purpose = h["rationale"]
+        if not h["pathway"]:
+            tools = h.get("candidate_tools", [])
+            purpose += " Follow up when: " + h["followup_when"]
+        label = ", ".join(tools) or "Evidence synthesis / review"
+        if not h["pathway"]:
+            label += " (conditional; select after evidence)"
+        lines.append(f"| {i}. {cell(h['statement'])} | {cell(purpose)} | {cell(label)} |")
+    for key, title in (("assumptions", "Assumptions"), ("out_of_scope", "Boundaries and gaps")):
+        if scope.get(key):
+            lines += ["", f"## {title}", ""] + [f"- {x}" for x in scope[key]]
+    lines += ["", f"Follow-up budget: {scope.get('max_followups', 12)} additional tool calls.",
+              "Stop when the agreed questions are answered, evidence is exhausted, or the budget is reached.", ""]
+    for q in scope.get("user_questions", []):
+        lines += [f"- {q['question']} Recommended: {q.get('recommended', 'discuss with user')}. {q['why_it_matters']}"]
+    lines += ["", "Please confirm this scope or describe changes. Analysis starts after confirmation.", ""]
+    return "\n".join(lines)

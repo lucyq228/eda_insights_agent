@@ -12,11 +12,11 @@ ROUTE = {
     "profile": "Analyst: profile_data.py",
     "scope_draft": "Scope & Feasibility specialist: read_context.py, save_scope.py",
     "feasibility": "Scope & Feasibility specialist: check_feasibility.py, save_feasibility.py",
-    "approval": "Analyst: activate a feasible exploratory scope with --exploration; confirmatory scopes require explicit approval",
+    "approval": "Main chat: present scope_proposal.md and feasibility limits, await user confirmation, then approve_scope.py --user-confirmation",
     "data_quality": "Analyst: advance_run.py (deterministic)",
     "prepared_data": "Analyst: advance_run.py (deterministic)",
     "analyses": "Analyst: advance_run.py (approved selected plan only)",
-    "review": "Reviewer & Insights specialist: review_checks.py, save_review.py",
+    "review": "Analyst: check scoped adaptive questions first; then Reviewer: review_checks.py, save_review.py",
     "insights": "Reviewer & Insights specialist: save_insights.py",
     "report": "Reviewer & Insights specialist: build_report.py",
 }
