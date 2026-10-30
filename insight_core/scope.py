@@ -75,12 +75,12 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
             errors.append(f"{h.get('id')}: candidate_tools must be a list")
         else:
             for tool in candidates:
-                if tool not in tools:
+                if registry.canonical(tool) not in tools:
                     errors.append(f"{h.get('id')}: unknown candidate tool '{tool}'")
-                elif tools[tool].get("phase") != "analysis" or tool == "multiple-testing":
+                elif tools[registry.canonical(tool)].get("phase") != "analysis" or registry.canonical(tool) == "multiple-testing-adjustment":
                     errors.append(f"{h.get('id')}: candidate tool '{tool}' is not a selectable analysis tool")
         for step in h.get("pathway", []):
-            if step.get("tool") not in tools:
+            if registry.canonical(step.get("tool")) not in tools:
                 errors.append(f"{h.get('id')}: unknown tool '{step.get('tool')}'")
             elif not step.get("purpose"):
                 errors.append(f"{h.get('id')}: step '{step['tool']}' needs a purpose")

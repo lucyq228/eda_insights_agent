@@ -73,7 +73,7 @@ def test_association_cache_reuses_identical_calculation(tmp_path, monkeypatch):
 def _scope(n: int) -> dict:
     hypotheses = [{"id": f"H{i}", "statement": "A testable association", "rationale": "decision relevance",
                    "support_criteria": "eta > 0.1",
-                   "pathway": [{"tool": "pair-deep-dive", "params": {"x": "driver"}, "purpose": "test it"}]}
+                   "pathway": [{"tool": "target-by-group", "params": {"by": "driver"}, "purpose": "test it"}]}
                   for i in range(1, n + 1)]
     return {"project_name": "p", "purpose": "p", "decision_supported": "d",
             "target": {"column": "target", "type": "numeric", "definition": "higher is better"},
@@ -101,8 +101,8 @@ def test_user_waived_step_is_skipped_not_failed(tmp_path):
     write_artifact(tmp_path, "step_waivers.json",
                    {"waivers": [{"step_id": "H1.S1", "reason": "User chose to omit this deep dive."}]},
                    upstream="approved_scope.json")
-    (tmp_path / "results" / "multiple-testing.json").write_text(json.dumps({
-        "label": "multiple-testing", "tool": "multiple-testing", "params": {}, "summary": "0 tests",
+    (tmp_path / "results" / "multiple-testing-adjustment.json").write_text(json.dumps({
+        "label": "multiple-testing-adjustment", "tool": "multiple-testing-adjustment", "params": {}, "summary": "0 tests",
         "findings": [], "q_values": [], "followup_reason": None,
     }), encoding="utf-8")
     index = write_analyses_index(tmp_path)

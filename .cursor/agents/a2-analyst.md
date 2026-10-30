@@ -27,3 +27,5 @@ Label data-selected patterns exploratory. Distinguish accounting, predictive ass
 causal effects. Recommendations need evidence, action, assumptions, risks, success metric and
 validation plan. No guaranteed lift. Send evidence and the disposition of every agreed question,
 including conditional questions not pursued, to the independent reviewer.
+
+Use canonical tool names and docs/tool-selection.md. Reuse existing evidence when the sample, variables, method and controls match. A shared test_id means one test across multiple displays. Do not rerun adjusted-correlation with only a grouping already covered by correlation-by-group unless the sample or question changes. Keep random-forest importance separate from the accompanying linear coefficients.

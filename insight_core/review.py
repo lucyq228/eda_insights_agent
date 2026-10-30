@@ -28,18 +28,23 @@ def challenges(run_dir: Path) -> dict:
     scope = read_artifact(run_dir, "approved_scope.json")
     results = load_results(run_dir)
     alpha, min_n = float(scope.get("alpha", .05)), int(scope.get("min_n", 30))
-    q = {(r["result"], r["label"]): r["q"] for r in results.get("multiple-testing", {}).get("q_values", [])}
+    q = {(r["result"], r["label"]): r["q"] for r in (results.get("multiple-testing-adjustment") or results.get("multiple-testing") or {}).get("q_values", [])}
     ent = scope.get("entity_column")
     panel = set(registry.panel_tools())
     waiver_artifact = read_artifact(run_dir, "step_waivers.json") or {}
     waivers = ({w["step_id"]: w for w in waiver_artifact.get("waivers", [])}
                if (waiver_artifact.get("upstream") or {}).get("sha256") == sha(run_dir / "approved_scope.json") else {})
+    evidence_refs = {}
+    for result in results.values():
+        for finding in result.get("findings", []):
+            if finding.get("test_id"):
+                evidence_refs.setdefault(finding["test_id"], []).append(result["label"])
     per_result = []
     for label, r in sorted(results.items()):
-        if label == "multiple-testing":
+        if label in ("multiple-testing-adjustment", "multiple-testing"):
             continue
         items = list(r.get("flags", []))
-        if ent and r["tool"] not in panel and r.get("findings"):
+        if ent and registry.canonical(r["tool"]) not in panel and r.get("findings"):
             items.append(f"PANEL POOLED: pools all {ent} rows; CIs treat them as independent and mix within- and "
                          f"between-{ent} patterns. Check the panel results before leading with this")
         if r.get("error"):
@@ -47,6 +52,9 @@ def challenges(run_dir: Path) -> dict:
         rows = []
         for f in r.get("findings", []):
             issues = []
+            reused = sorted(set(evidence_refs.get(f.get("test_id"), [])))
+            if len(reused) > 1:
+                issues.append("REUSED TEST: " + ", ".join(reused) + "; one test, not independent confirmation")
             qv = q.get((label, f["label"]))
             if f.get("n") is not None and f["n"] < min_n:
                 issues.append(f"n={f['n']} < min_n")
@@ -60,7 +68,7 @@ def challenges(run_dir: Path) -> dict:
                     "spearman_r_pooled", "spearman_r_within_entity", "spearman_r_between_entity"):
                 issues.append("negligible size (|est| < 0.1)")
             rows.append({"finding": f["label"], "metric": f["metric"], "estimate": f.get("estimate"),
-                         "ci": [f.get("ci_low"), f.get("ci_high")], "n": f.get("n"), "q": qv, "issues": issues})
+                         "ci": [f.get("ci_low"), f.get("ci_high")], "n": f.get("n"), "q": qv, "test_id": f.get("test_id"), "issues": issues})
         descriptive = bool(r.get("findings")) and all(f.get("evidence_type") == "descriptive" for f in r["findings"])
         finding_count = len(rows)
         if descriptive:

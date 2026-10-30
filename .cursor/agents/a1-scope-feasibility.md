@@ -33,3 +33,5 @@ Use read_context.py, save_scope.py and feasibility scripts. Do not inspect raw r
 
 After user changes, revise the proposal and rerun feasibility before confirmation/activation.
 Do not execute substantive analysis. Return the proposal version and a clear awaiting-user handoff.
+
+Select canonical tools using the registry use_when/reuse guidance and docs/tool-selection.md. Numeric profiles use target-by-numeric-bins; categorical comparisons use target-by-group. Do not schedule equivalent tests as separate evidence. Match pooled, adjusted, within and between questions to the intended decision.

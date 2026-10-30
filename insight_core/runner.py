@@ -117,8 +117,10 @@ def compact(record: dict) -> dict:
 def execute(run_dir: Path, tool_id: str, params: dict, label: str, actor: str, step: dict | None = None,
             followup_reason: str | None = None, hypothesis: str | None = None) -> dict:
     """Run one analysis tool under the locked scope. Refuses blocked steps."""
+    requested_tool = tool_id
+    tool_id = registry.canonical(tool_id)
     scope = load_approved(run_dir)
-    if step is None and not followup_reason and tool_id != "multiple-testing":
+    if step is None and not followup_reason and tool_id != "multiple-testing-adjustment":
         refuse("analyses outside the approved plan need --followup-reason")
     if hypothesis and (not followup_reason or hypothesis not in {h["id"] for h in scope["hypotheses"]}):
         refuse("follow-up hypothesis must name a question in the approved scope and needs a reason")
@@ -129,8 +131,8 @@ def execute(run_dir: Path, tool_id: str, params: dict, label: str, actor: str, s
             refuse("follow-up budget reached; summarize unresolved questions and agree a new run if needed")
     df, meta = load_prepared(run_dir)
     profile = read_artifact(run_dir, "profile.json")
-    if tool_id != "multiple-testing":
-        check = registry.check_step(tool_id, params, scope, profile, leakage_columns(run_dir))
+    if tool_id != "multiple-testing-adjustment":
+        check = registry.check_step(requested_tool, params, scope, profile, leakage_columns(run_dir))
         if check["verdict"] == "blocked":
             events.emit(run_dir, "refused", actor, f"{label} {tool_id}: {check['reasons']}")
             return {"label": label, "tool": tool_id, "error": "blocked by feasibility", "reasons": check["reasons"],
@@ -148,22 +150,38 @@ def execute(run_dir: Path, tool_id: str, params: dict, label: str, actor: str, s
         actual_profile = describe(df)
         for info in actual_profile["columns"]:
             info["type"] = types.get(info["name"], info["type"])
-        checked = registry.check_step(tool_id, {k:v for k,v in params.items() if k != "view"}, scope, actual_profile, [])
+        checked = registry.check_step(requested_tool, {k:v for k,v in params.items() if k != "view"}, scope, actual_profile, [])
         if checked["verdict"] == "blocked":
             refuse("view fails actual-grain feasibility: " + str(checked["reasons"]))
         if len(df) < int(scope.get("min_n", 30)):
             refuse(f"view {name} has only {len(df)} rows; below min_n")
+    tool_id, params = registry.resolve_call(requested_tool, params, types)
     drivers = [c for c in registry.resolved_drivers(scope, profile) if c in df.columns]
     ctx = Ctx(run_dir=run_dir, df=df, types=types, scope=scope, label=label, drivers=drivers)
     run_meta = {"step_id": (step or {}).get("step_id"), "hypothesis": hypothesis or (step or {}).get("hypothesis"),
                 "purpose": (step or {}).get("purpose"), "followup_reason": followup_reason,
                 "view": params.get("view"), "unit_of_analysis": scope["unit_of_analysis"],
+                "requested_tool": requested_tool,
                 "analysis_mode": scope.get("mode", "confirmatory")}
     events.emit(run_dir, "tool start", actor, f"{label} {tool_id}",
                 {"label": label, "tool": tool_id, "n_rows": len(df)})
     started = time.perf_counter()
     try:
         out = registry.function(tool_id)(ctx, params)
+        # Namespace statistical identities by the actual analysis view/grain.
+        import hashlib
+        namespace = json.dumps([scope.get("active_view"), params.get("view"), scope.get("unit_of_analysis"),
+                                sha(run_dir / "datasets" / "prepared.parquet")], sort_keys=True)
+        for finding in out.get("findings", []):
+            if finding.get("p") is not None and not finding.get("test_id"):
+                # For model/curvature/panel tests, deduplicate exact reruns only.
+                # Never infer equivalence just from matching estimates or p-values.
+                from .stats import test_identity
+                finding["test_id"] = test_identity(tool_id, df,
+                    [params, finding.get("label"), finding.get("metric"), drivers, types,
+                     scope.get("target"), ctx.entity, scope.get("date_column"), ctx.min_n])
+            if finding.get("test_id"):
+                finding["test_id"] = hashlib.sha256((namespace + finding["test_id"]).encode()).hexdigest()
         repeated_key = ctx.entity or scope.get("roles", {}).get("customer")
         if repeated_key in df.columns and df[repeated_key].duplicated().any() and tool_id not in registry.panel_tools() and not registry.get(tool_id).get("descriptive"):
             out.setdefault("flags", []).append("REPEATED ENTITIES: ordinary intervals assume independent rows; do not claim cluster-valid precision")
@@ -205,9 +223,11 @@ def write_analyses_index(run_dir: Path) -> dict:
     followups = [{"label": k, "tool": r["tool"], "params": r["params"], "reason": r["followup_reason"],
                   "summary": r.get("summary"), "flags": r.get("flags", []), "error": r.get("error")}
                  for k, r in results.items() if r.get("followup_reason")]
-    mt = results.get("multiple-testing")
+    mt = results.get("multiple-testing-adjustment") or results.get("multiple-testing")
     if not mt:
-        errors.append("multiple-testing has not been run")
+        errors.append("multiple-testing-adjustment has not been run")
+    elif mt.get("error"):
+        errors.append("multiple-testing-adjustment failed: " + mt["error"])
     index = {"steps": steps, "followups": followups,
              "multiple_testing": (mt or {}).get("summary"), "errors": errors,
              "n_results": len(results), "written_at": datetime.now().isoformat(timespec="seconds")}
@@ -215,5 +235,8 @@ def write_analyses_index(run_dir: Path) -> dict:
     return index
 
 
-def refresh_multiple_testing(run_dir: Path, actor: str) -> dict:
-    return execute(run_dir, "multiple-testing", {}, "multiple-testing", actor)
+def refresh_multiple_testing_adjustment(run_dir: Path, actor: str) -> dict:
+    return execute(run_dir, "multiple-testing-adjustment", {}, "multiple-testing-adjustment", actor)
+
+
+refresh_multiple_testing = refresh_multiple_testing_adjustment

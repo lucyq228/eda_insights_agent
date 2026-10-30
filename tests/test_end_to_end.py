@@ -72,8 +72,8 @@ def test_store_sales_full_flow(tmp_path):
     assert panel["n_entities"] == 80 and panel["date_column"] == "week_start"
     assert [p["column"] for p in prof["panel_candidates"]] == ["store_id"]
     ctx = run("scope", "read_context")
-    assert "tool_shelf" in ctx and "multiple-testing" not in [t["id"] for t in ctx["tool_shelf"]]
-    assert ctx["panel_candidates"] and "panel-decomposition" in [t["id"] for t in ctx["tool_shelf"]]
+    assert "tool_shelf" in ctx and "multiple-testing-adjustment" not in [t["id"] for t in ctx["tool_shelf"]]
+    assert ctx["panel_candidates"] and "within-between-correlation" in [t["id"] for t in ctx["tool_shelf"]]
 
     # v1 forgets the leakage column and ignores the panel: feasibility must catch both.
     v1 = copy.deepcopy(EXAMPLE)
@@ -87,7 +87,7 @@ def test_store_sales_full_flow(tmp_path):
     assert any("sales_per_visitor" in s for s in auto["scope_issues"])
     assert "sales_per_visitor" in [x["column"] for x in auto["leakage_suspects"]]
     assert any("looks like a panel" in s for s in auto["scope_issues"])
-    assert any(s["tool"] == "panel-decomposition" and s["verdict"] == "blocked" for s in auto["steps"])
+    assert any(s["tool"] == "within-between-correlation" and s["verdict"] == "blocked" for s in auto["steps"])
     run("feasibility", "save_feasibility", "--file", run.draft("feasibility.json", JUDGMENT))
     run("run-insights-project", "approve_scope", "--user-confirmation", "yes", ok=False)
 
@@ -129,7 +129,7 @@ def test_store_sales_full_flow(tmp_path):
     assert within["estimate"] > .1 and within["ci_low"] > 0
     assert res["H3.S1"]["nonlinear"] and "inverted-U" in res["H3.S1"]["findings"][1]["direction"]
     assert res["H4.S1"]["findings"][1]["estimate"] < -.1
-    assert res["multiple-testing"]["q_values"]
+    assert res["multiple-testing-adjustment"]["q_values"]
     decomp = res["H2.S2"]
     assert [f["metric"] for f in decomp["findings"]] == [
         "spearman_r_pooled", "spearman_r_within_entity", "spearman_r_between_entity"]
@@ -139,11 +139,11 @@ def test_store_sales_full_flow(tmp_path):
     assert {f["metric"] for f in pdrv["findings"]} == {"within_std_coef", "between_std_coef"}
     assert pdrv["holdout_score"]["metric"].startswith("within R^2")
     assert any("whole store_id" in n for n in res["H5.S2"]["notes"])
-    mt_results = {r["result"] for r in res["multiple-testing"]["q_values"]}
+    mt_results = {r["result"] for r in res["multiple-testing-adjustment"]["q_values"]}
     assert {"H2.S2", "H5.S3"} <= mt_results
 
     # Follow-ups need a reason and still pass feasibility.
-    run("insight-shelf", "run_tool", "--tool", "pair-deep-dive", "--params-file",
+    run("insight-shelf", "run_tool", "--tool", "target-by-numeric-bins", "--params-file",
         run.file("p0.json", {"x": "sales_per_visitor"}), "--followup-reason", "curious", ok=False)
 
     checks = run("review-insights", "review_checks")
@@ -158,14 +158,14 @@ def test_store_sales_full_flow(tmp_path):
                      "evidence": [{"result": "H5.S2"}]})
     review = {"hypothesis_verdicts": verdicts,
               "challenges": [{"issue": "Pooled promo result misleads", "resolution": "Lead with within-region"}],
-              "rerun_requests": [{"tool": "segment-correlation", "params": {"x": "staff_hours", "by": "store_format"},
+              "rerun_requests": [{"tool": "correlation-by-group", "params": {"x": "staff_hours", "by": "store_format"},
                                   "reason": "Is staffing stronger in some formats?"}]}
     run("review-insights", "save_review", "--file", run.draft("review.json", review))
     status = run("run-insights-project", "run_status")
     assert status["targeted_followups"]
     run("review-insights", "save_insights", "--file", run.draft("insights.json", {}), ok=False)
 
-    fu = run("insight-shelf", "run_tool", "--tool", "segment-correlation", "--params-file",
+    fu = run("insight-shelf", "run_tool", "--tool", "correlation-by-group", "--params-file",
              run.file("p1.json", {"x": "staff_hours", "by": "store_format"}),
              "--followup-reason", "The reviewer asked whether staffing differs by format")
     assert fu["result"]["label"] == "F1"
@@ -227,12 +227,12 @@ def test_attrition_binary_target(tmp_path):
         "hypotheses": [
             {"id": "H1", "statement": "Lower engagement goes with more leaving.", "rationale": "r",
              "support_criteria": "r < -0.1", "pathway": [
-                {"tool": "target-associations", "params": {}, "purpose": "screen"},
-                {"tool": "segment-breakdown", "params": {"by": "department"}, "purpose": "by department"}]},
+                {"tool": "feature-target-associations", "params": {}, "purpose": "screen"},
+                {"tool": "target-by-group", "params": {"by": "department"}, "purpose": "by department"}]},
             {"id": "H2", "statement": "Attrition risk is concentrated early in tenure.", "rationale": "r",
              "support_criteria": "curvature", "pathway": [
                 {"tool": "nonlinearity-check", "params": {"x": "tenure_years"}, "purpose": "shape"},
-                {"tool": "driver-importance", "params": {}, "purpose": "joint"}]}],
+                {"tool": "predictive-feature-importance", "params": {}, "purpose": "joint"}]}],
         "user_questions": []}
     leaky = copy.deepcopy(scope)
     leaky["exclude"] = []
@@ -262,7 +262,7 @@ def test_tool_target_type_gate(tmp_path, bad_type):
              "unit_of_analysis": "employee", "drivers": ["tenure_years"],
              "hypothesis_count_exception": "This fixture isolates one type-gate check.",
              "hypotheses": [{"id": "H1", "statement": "s", "rationale": "r", "support_criteria": "c",
-                             "pathway": [{"tool": "partial-correlation",
+                             "pathway": [{"tool": "adjusted-correlation",
                                           "params": {"x": "tenure_years", "controls": ["commute_km"]},
                                           "purpose": "p"}]}]}
     run("scope", "save_scope", "--file", run.draft("scope.json", scope))

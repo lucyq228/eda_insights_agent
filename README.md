@@ -59,3 +59,5 @@ tools do not run automatically. See [scoping examples](docs/scoping-examples.md)
 New scopes require `approve_scope.py --user-confirmation "<actual user reply>"`, including
 exploratory scopes. The legacy `--exploration` flag no longer bypasses confirmation. Existing
 locked runs remain readable. No additional package or agent is required.
+
+Tool selection and compatibility: see `docs/tool-selection.md`; the registry exposes canonical names and reuse guidance.

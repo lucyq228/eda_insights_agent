@@ -10,3 +10,5 @@ metrics, period-comparison for exact accounting differences, and view: <name> wi
 tools to analyze approved aggregate views. Preserve explicit units and denominators.
 Do not treat descriptive accounting as causal attribution. Use the original statistical
 shelf when the question requires inference; respect sample-size, dependence and rank warnings.
+
+Tool selection and compatibility: see `docs/tool-selection.md`; the registry exposes canonical names and reuse guidance.

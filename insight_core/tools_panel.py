@@ -62,7 +62,7 @@ def _within_share(a: np.ndarray, entity: np.ndarray) -> float:
     return float(_demean(a, [entity]).var() / total) if total > 0 else 0.0
 
 
-def panel_decomposition(ctx: Ctx, params: dict) -> dict:
+def within_between_correlation(ctx: Ctx, params: dict) -> dict:
     if ctx.target_type == "categorical":
         raise ValueError("this tool needs a numeric or binary target")
     x, ent = params["x"], ctx.entity
@@ -127,7 +127,7 @@ def panel_decomposition(ctx: Ctx, params: dict) -> dict:
                       "Spearman-type: x and the target are ranked first, so outliers have little pull"]}
 
 
-def panel_drivers(ctx: Ctx, params: dict) -> dict:
+def within_between_regression(ctx: Ctx, params: dict) -> dict:
     from sklearn.model_selection import GroupShuffleSplit
 
     if ctx.target_type == "categorical":
@@ -219,3 +219,7 @@ def panel_drivers(ctx: Ctx, params: dict) -> dict:
                 f"between = {ent} averages compared with each other (n = {k})",
                 "linear on standardized values, so curves are missed; coefficients are associations, not results of changing a driver",
                 between_note] if n_]}
+
+
+panel_decomposition = within_between_correlation
+panel_drivers = within_between_regression

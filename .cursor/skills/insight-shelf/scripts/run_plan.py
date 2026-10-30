@@ -8,7 +8,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[4]))
 from insight_core import registry  # noqa: E402
 from insight_core.locking import milestone_lock  # noqa: E402
 from insight_core.runner import (base_parser, compact, configure_stdout, emit_json, execute,  # noqa: E402
-                                 refresh_multiple_testing, resolve, waived_steps, write_analyses_index)
+                                 refresh_multiple_testing_adjustment, resolve, waived_steps, write_analyses_index)
 from insight_core.scope import load_approved  # noqa: E402
 from insight_core.state import milestone_done  # noqa: E402
 
@@ -36,7 +36,7 @@ def main() -> None:
                 out.append({"label": step["step_id"], "tool": step["tool"], "summary": "already done (use --force to rerun)"})
                 continue
             out.append(compact(execute(run_dir, step["tool"], step["params"], step["step_id"], args.actor, step=step)))
-        mt = refresh_multiple_testing(run_dir, args.actor)
+        mt = refresh_multiple_testing_adjustment(run_dir, args.actor)
         index = write_analyses_index(run_dir)
         emit_json({"steps": out, "multiple_testing": mt.get("summary"), "errors": index["errors"],
                    "next": "Analyst: inspect evidence and address scoped adaptive questions, then request review" if not index["errors"] else "report the errors to the coordinator"},

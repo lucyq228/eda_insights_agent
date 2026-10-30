@@ -76,3 +76,5 @@ frequency differences with identical purchase amounts, temporal volume changes w
 amounts, accounting reconciliation, preserved identifiers, view grain, aggregate evidence access,
 category display invariance, p-value precision, and suppression of unidentified coefficients.
 The QVI example plan is a manual integration benchmark; keep source data and artifacts out of git.
+
+Tool selection and compatibility: see `docs/tool-selection.md`; the registry exposes canonical names and reuse guidance.

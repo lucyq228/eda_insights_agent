@@ -21,7 +21,7 @@ def _xtype(ctx: Ctx, c: str) -> str:
 
 
 def _finding(label: str, x: str, y: str, res: dict, **extra) -> dict:
-    keys = ("metric", "estimate", "ci_low", "ci_high", "p", "n", "direction")
+    keys = ("metric", "estimate", "ci_low", "ci_high", "p", "n", "direction", "test_id")
     return {"label": label, "x": x, "y": y, **{k: res.get(k) for k in keys}, **extra}
 
 
@@ -71,7 +71,7 @@ def group_top_levels(series: pd.Series, max_levels: int = 10, other_label: str =
     return grouped, metadata
 
 
-def target_associations(ctx: Ctx, params: dict) -> dict:
+def feature_target_associations(ctx: Ctx, params: dict) -> dict:
     drivers = params.get("drivers") or ctx.drivers
     findings = []
     for c in drivers:
@@ -86,7 +86,7 @@ def target_associations(ctx: Ctx, params: dict) -> dict:
         c = findings[i]["x"]
         if _xtype(ctx, c) == "categorical" and ctx.df[c].nunique(dropna=True) > 10:
             findings[i]["interval_status"] = "screening_point_estimate_high_cardinality"
-            findings[i]["report_grade_next_step"] = "pair-deep-dive (all levels tested; display may be capped)"
+            findings[i]["report_grade_next_step"] = "target-by-group (all levels tested; display may be capped)"
             continue
         res = associate_cached(ctx, c, _xtype(ctx, c), with_interval=True)
         findings[i] = _finding(f"{c} ~ {ctx.target}", c, ctx.target, res,
@@ -125,35 +125,29 @@ def correlation_matrix(ctx: Ctx, params: dict) -> dict:
             "collinear_pairs": pairs}
 
 
-def pair_deep_dive(ctx: Ctx, params: dict) -> dict:
+def target_by_numeric_bins(ctx: Ctx, params: dict) -> dict:
     x = params["x"]
-    x_values = ctx.df[x]
-    grouping = None
-    if _xtype(ctx, x) == "categorical":
-        x_values, grouping = group_top_levels(x_values, params.get("max_levels", 10))
-    variant = f"top-{grouping['max_levels']}-by-frequency" if grouping and grouping["applied"] else "raw"
-    res = associate_cached(ctx, x, _xtype(ctx, x), with_interval=True, values=ctx.df[x], variant="raw")
+    if _xtype(ctx, x) != "numeric":
+        raise ValueError("target-by-numeric-bins requires numeric x; use target-by-group for categories")
+    res = associate_cached(ctx, x, "numeric", with_interval=True)
     f = _finding(f"{x} ~ {ctx.target}", x, ctx.target, res, strength=stats.strength(res["estimate"]))
-    extra = ({"level_grouping": grouping,
-              "notes": ["display only: levels selected by frequency; association uses all original levels"]}
-             if grouping and grouping["applied"] else {})
     if ctx.target_type == "categorical":
-        table = pd.crosstab(x_values if _xtype(ctx, x) == "categorical" else pd.qcut(x_values, 5, duplicates="drop"),
-                            ctx.df[ctx.target], normalize="index").round(3).reset_index().astype(str)
-        return {"summary": f"{x}: {res['metric']}={res['estimate']} (n={res['n']})", "findings": [f],
-                "tables": {"profile": table}, "charts": [], **extra}
-    if _xtype(ctx, x) == "numeric":
-        table = _binned(x_values, ctx.df[ctx.target], int(params.get("bins", 10)))
-        chart = charts.binned_line(table, x, ctx.target, f"{ctx.target} across {x} deciles (95% CI)", ctx.chart("binned"))
+        bins = pd.qcut(ctx.df[x], int(params.get("bins", 10)), duplicates="drop")
+        table = pd.crosstab(bins, ctx.df[ctx.target], normalize="index").round(3).reset_index().astype(str)
+        chart_list = []
     else:
-        table = _group_table(x_values, ctx.df[ctx.target])
-        chart = charts.group_bars(table, "level", f"{ctx.target} by {x} (95% CI)", f"mean {ctx.target}", ctx.chart("groups"))
-    return {"summary": f"{x}: {res['metric']}={res['estimate']} [{res['ci_low']}, {res['ci_high']}], n={res['n']}",
-            "findings": [f], "tables": {"profile": table}, "charts": [chart], **extra}
+        table = _binned(ctx.df[x], ctx.df[ctx.target], int(params.get("bins", 10)))
+        chart_list = [charts.binned_line(table, x, ctx.target,
+                     f"{ctx.target} across {x} quantile bins (95% CI)", ctx.chart("binned"))]
+    return {"summary": f"{x}: {res['metric']}={res['estimate']} (n={res['n']})", "findings": [f],
+            "tables": {"profile": table}, "charts": chart_list,
+            "notes": ["Bins summarize the display; association uses the original unbinned observations."]}
 
 
-def segment_breakdown(ctx: Ctx, params: dict) -> dict:
+def target_by_group(ctx: Ctx, params: dict) -> dict:
     by = params["by"]
+    if _xtype(ctx, by) == "numeric":
+        raise ValueError("target-by-group requires categorical groups; use target-by-numeric-bins")
     segments, grouping = group_top_levels(ctx.df[by], params.get("max_levels", 10))
     variant = f"top-{grouping['max_levels']}-by-frequency" if grouping["applied"] else "raw"
     res = associate_cached(ctx, by, "categorical", with_interval=True, values=ctx.df[by], variant="raw")
@@ -178,7 +172,7 @@ def _partial_r(x: np.ndarray, y: np.ndarray, Z: np.ndarray) -> float:
     return float(np.corrcoef(stats.residualize(x, Z), stats.residualize(y, Z))[0, 1])
 
 
-def segment_correlation(ctx: Ctx, params: dict) -> dict:
+def correlation_by_group(ctx: Ctx, params: dict) -> dict:
     _numeric_target(ctx)
     x, by = params["x"], params["by"]
     d = ctx.df[[x, by, ctx.target]].dropna()
@@ -201,7 +195,8 @@ def segment_correlation(ctx: Ctx, params: dict) -> dict:
     n, k = len(d), Z.shape[1]
     lo, hi = stats.fisher_ci(within_r, n - k, ctx.alpha)
     t = within_r * np.sqrt((n - 2 - k) / max(1e-12, 1 - within_r ** 2))
-    within = {"metric": "spearman_r_within_segments", "estimate": round(within_r, 4), "ci_low": round(lo, 4),
+    within = {"test_id": stats.adjusted_test_id(d[x], d[ctx.target], d, [by], ctx.types),
+              "metric": "spearman_r_within_segments", "estimate": round(within_r, 4), "ci_low": round(lo, 4),
               "ci_high": round(hi, 4), "p": float(2 * st.t.sf(abs(t), n - 2 - k)), "n": n,
               "direction": "positive" if within_r > 0 else "negative"}
     findings.append(_finding(f"{x} ~ {ctx.target} | within {by}", x, ctx.target, within, segment="within"))
@@ -230,7 +225,7 @@ def segment_correlation(ctx: Ctx, params: dict) -> dict:
             "heterogeneity_p": het_p, "simpson_flag": any(f.startswith("SIMPSON") for f in flags)}
 
 
-def partial_correlation(ctx: Ctx, params: dict) -> dict:
+def adjusted_correlation(ctx: Ctx, params: dict) -> dict:
     _numeric_target(ctx)
     x, controls = params["x"], params["controls"]
     d = ctx.df[[x, ctx.target] + controls].dropna(subset=[x, ctx.target])
@@ -244,7 +239,8 @@ def partial_correlation(ctx: Ctx, params: dict) -> dict:
     n, k = len(d), Z.shape[1]
     lo, hi = stats.fisher_ci(r, n - k, ctx.alpha)
     t = r * np.sqrt((n - 2 - k) / max(1e-12, 1 - r ** 2))
-    part = {"metric": "partial_spearman_r", "estimate": round(r, 4), "ci_low": round(lo, 4), "ci_high": round(hi, 4),
+    part = {"test_id": stats.adjusted_test_id(d[x], d[ctx.target], d, controls, ctx.types),
+            "metric": "partial_spearman_r", "estimate": round(r, 4), "ci_low": round(lo, 4), "ci_high": round(hi, 4),
             "p": float(2 * st.t.sf(abs(t), n - 2 - k)), "n": n, "direction": "positive" if r > 0 else "negative"}
     label_c = ", ".join(controls)
     findings = [_finding(f"{x} ~ {ctx.target} | raw", x, ctx.target, raw),
@@ -331,7 +327,7 @@ def time_trend(ctx: Ctx, params: dict) -> dict:
             "flags": flags}
 
 
-def driver_importance(ctx: Ctx, params: dict) -> dict:
+def predictive_feature_importance(ctx: Ctx, params: dict) -> dict:
     from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
     from sklearn.metrics import accuracy_score, r2_score, roc_auc_score
     from sklearn.model_selection import GroupShuffleSplit, train_test_split
@@ -404,27 +400,53 @@ def driver_importance(ctx: Ctx, params: dict) -> dict:
     top = ", ".join(imp["driver"].head(3))
     return {"summary": f"holdout {metric}={base:.3f}; top drivers by importance: {top}", "findings": findings,
             "tables": {"importance": imp, "coefficients": pd.DataFrame(coef_rows)}, "charts": charts_out, "flags": flags,
+            "output_roles": {"importance": "random-forest predictive usefulness",
+                             "coefficients": "separate linear model: adjusted associations, not RF directions"},
             "holdout_score": {"metric": metric, "value": round(float(base), 4)},
             "notes": ["importance measures predictive usefulness, not what would happen if a driver were changed",
                       "coefficients are associations holding the other drivers fixed (linear, so curves are missed)"]
                      + ([f"holdout = whole {ent} values not seen in training; coefficients pool all {ent} rows "
-                         "(see panel-drivers for within/between)"] if ent else [])}
+                         "(see within-between-regression for within/between)"] if ent else [])}
 
 
-def multiple_testing(ctx: Ctx, params: dict) -> dict:
+def multiple_testing_adjustment(ctx: Ctx, params: dict) -> dict:
     rows = []
     for path in sorted((ctx.run_dir / "results").glob("*.json")):
         res = json.loads(path.read_text(encoding="utf-8"))
-        if res.get("tool") == "multiple-testing":
+        if res.get("tool") in ("multiple-testing", "multiple-testing-adjustment"):
             continue
         for f in res.get("findings", []):
             if f.get("p") is not None:
                 rows.append({"result": res["label"], "label": f["label"], "metric": f["metric"], "estimate": f["estimate"],
-                             "p": f["p"], "followup": bool(res.get("followup_reason"))})
-    qs = stats.bh_qvalues([r["p"] for r in rows])
-    for r, q in zip(rows, qs):
-        r["q"] = q
-        r["significant_after_fdr"] = q < ctx.alpha
-    n_sig = sum(r["significant_after_fdr"] for r in rows)
-    return {"summary": f"{len(rows)} tests in the family; {n_sig} pass Benjamini-Hochberg FDR at {ctx.alpha}",
-            "findings": [], "q_values": rows, "tables": {"q_values": pd.DataFrame(rows)}, "charts": []}
+                             "test_id": f.get("test_id") or f"legacy:{res['label']}:{f['label']}",
+                                 "p": f["p"], "followup": bool(res.get("followup_reason"))})
+    unique = {}
+    for r in rows:
+        previous = unique.setdefault(r["test_id"], r)
+        if not np.isclose(previous["p"], r["p"], rtol=1e-10, atol=1e-14):
+            raise ValueError("Identical test IDs have inconsistent p-values; rerun the affected analyses")
+    qs = dict(zip(unique, stats.bh_qvalues([r["p"] for r in unique.values()])))
+    for r in rows:
+        r["q"] = qs[r["test_id"]]
+        r["significant_after_fdr"] = r["q"] < ctx.alpha
+    n_sig = sum(q < ctx.alpha for q in qs.values())
+    return {"summary": f"{len(unique)} unique tests in the family ({len(rows)} result references); {n_sig} pass Benjamini-Hochberg FDR at {ctx.alpha}",
+            "findings": [], "q_values": rows, "n_unique_tests": len(unique), "tables": {"q_values": pd.DataFrame(rows)}, "charts": []}
+
+
+def pair_deep_dive(ctx: Ctx, params: dict) -> dict:
+    if _xtype(ctx, params["x"]) == "numeric":
+        return target_by_numeric_bins(ctx, params)
+    return target_by_group(ctx, {"by": params["x"], **{k: v for k, v in params.items() if k not in ("x", "bins")}})
+
+target_associations = feature_target_associations
+
+segment_breakdown = target_by_group
+
+segment_correlation = correlation_by_group
+
+partial_correlation = adjusted_correlation
+
+driver_importance = predictive_feature_importance
+
+multiple_testing = multiple_testing_adjustment

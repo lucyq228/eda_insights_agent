@@ -7,6 +7,7 @@ import html
 import json
 from pathlib import Path
 
+from . import registry
 from .state import read_artifact
 
 
@@ -16,7 +17,7 @@ def _results(run_dir: Path) -> dict:
 
 
 def _qmap(results: dict) -> dict:
-    mt = results.get("multiple-testing", {})
+    mt = (results.get("multiple-testing-adjustment") or results.get("multiple-testing") or {})
     return {(r["result"], r["label"]): r["q"] for r in mt.get("q_values", [])}
 
 
@@ -39,6 +40,28 @@ def panel_line(scope: dict) -> str | None:
     return (f"Panel data: each {ent} is observed repeatedly. Within-{ent} estimates compare the same {ent} over time; "
             f"between-{ent} estimates compare {ent} averages (n = number of entities). CIs from panel tools are "
             f"clustered by {ent}.")
+
+
+def supporting_tools(insight: dict, results: dict) -> list[str]:
+    """Unique canonical tool names from this insight's cited, valid evidence only."""
+    names = []
+    for evidence in insight.get("evidence", []):
+        result = results.get(evidence.get("result"), {})
+        if result.get("error") or not result.get("tool"):
+            continue
+        if evidence.get("finding") and not any(
+                f.get("label") == evidence["finding"] for f in result.get("findings", [])):
+            continue
+        tool, _ = registry.resolve_call(result["tool"], result.get("params", {}), {})
+        # Legacy categorical deep dives used group profiles, before canonical routing.
+        if result["tool"] == "pair-deep-dive" and any(
+                f.get("metric") == "cramers_v" or
+                (f.get("metric") == "eta" and str(f.get("direction", "")).startswith("highest in "))
+                for f in result.get("findings", [])):
+            tool = "target-by-group"
+        if tool not in names:
+            names.append(tool)
+    return names
 
 
 def build(run_dir: Path) -> dict:
@@ -73,6 +96,9 @@ def build(run_dir: Path) -> dict:
         imgs = list(dict.fromkeys(imgs))[:2]
         md += [f"### {ins['id']}. {ins['title']}", "", ins["statement"], "",
                f"*Strength:* {ins['strength']} | *Confidence:* {ins['confidence']}", ""]
+        tools = supporting_tools(ins, results)
+        if tools:
+            md += ["*Supporting tools:* " + ", ".join(f"`{tool}`" for tool in tools), ""]
         md += [f"- {e}" for e in ev_lines]
         md += [f"- Caveat: {c}" for c in ins.get("caveats", [])]
         if ins.get("suggested_next_step"):
@@ -113,9 +139,11 @@ def _html(scope, insights, review, blocks, prep, dq, results, skipped) -> str:
     e = html.escape
     cards = []
     for ins, ev_lines, imgs in blocks:
+        tool_tags = "".join(f'<span class="tool-tag">tool: {e(tool)}</span>'
+                            for tool in supporting_tools(ins, results))
         cards.append(
             f'<section class="card"><h3>{e(ins["id"])}. {e(ins["title"])}</h3><p>{e(ins["statement"])}</p>'
-            f'<p class="tags"><span>{e(ins["strength"])}</span><span>confidence: {e(ins["confidence"])}</span></p>'
+            f'<p class="tags"><span>{e(ins["strength"])}</span><span>confidence: {e(ins["confidence"])}</span>{tool_tags}</p>'
             f'<ul class="ev">{"".join(f"<li>{e(x)}</li>" for x in ev_lines)}</ul>'
             + "".join(f'<p class="caveat">Caveat: {e(c)}</p>' for c in ins.get("caveats", []))
             + (f'<p class="next">Next step: {e(ins["suggested_next_step"])}</p>' if ins.get("suggested_next_step") else "")
@@ -134,12 +162,13 @@ def _html(scope, insights, review, blocks, prep, dq, results, skipped) -> str:
                       f"<p>Risks: {e(str(r['risks']))}</p></section>" for r in insights.get("recommendations", []))
     t = scope["target"]
     panel_html = f'<p class="note">{e(panel_line(scope))}</p>' if panel_line(scope) else ""
-    return f"""<!doctype html><html><head><meta charset="utf-8"><title>{e(scope['project_name'])}</title>
+    return f"""<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>{e(scope['project_name'])}</title>
 <style>
 body{{font-family:Segoe UI,Arial,sans-serif;max-width:980px;margin:32px auto;padding:0 20px;color:#1f2933;line-height:1.5}}
 h1{{margin-bottom:4px}} .meta{{color:#52606d}} .note{{background:#f0f4f8;border-left:4px solid #2f6db5;padding:10px 14px}}
 .card{{border:1px solid #d9e2ec;border-radius:8px;padding:14px 18px;margin:16px 0}}
-.tags span{{background:#e3ecf7;border-radius:10px;padding:2px 10px;margin-right:6px;font-size:13px}}
+.tags{{display:flex;flex-wrap:wrap;gap:6px;align-items:center}}
+.tags span{{overflow-wrap:anywhere;min-width:0;background:#e3ecf7;border-radius:10px;padding:2px 10px;font-size:13px}}
 .ev{{font-family:Consolas,monospace;font-size:13px}} .caveat{{color:#8a4b08}} .next{{color:#196c2e}}
 .imgs img{{max-width:48%;margin:6px 1% 0 0;border:1px solid #eee}}
 table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #d9e2ec;padding:6px 8px;vertical-align:top}}
