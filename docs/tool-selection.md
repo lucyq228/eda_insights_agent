@@ -44,3 +44,10 @@ route to `target-by-numeric-bins`. Direct legacy Python function names remain us
 Approved scope snapshots are never rewritten. New saved results use canonical tool
 IDs and record `requested_tool`; readers accept the old multiple-testing artifact.
 Historical exported reports are snapshots and are not rewritten.
+
+## Report provenance
+
+Each key insight displays unique supporting tool tags beside strength and confidence.
+Tags come from valid cited result records, use canonical names, and exclude uncited
+analyses. Agents only need to cite evidence normally; no separate tool list is required.
+The Markdown report lists the same tools. Rebuild reports to show tags in existing runs.
