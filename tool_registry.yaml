@@ -422,3 +422,16 @@ tools:
     descriptive: true
     caveats:
     - Descriptive accounting; not causal impact or intervention lift.
+  rate-change-decomposition:
+    phase: analysis
+    function: insight_core.tools_business:rate_change_decomposition
+    question: How much of a change in event rate reflects group mix versus rates within groups?
+    target_types: [binary]
+    descriptive: true
+    use_when: Compare two cohorts of eligible units with the same outcome window and a plausible pre-outcome grouping.
+    reuse: Each grouping explains the same total change. Combine with other tools for distinct questions.
+    params:
+      cohort: {type: column, required: true, description: Scoped cohort field assigned before the outcome}
+      baseline: {type: str, required: true, description: Baseline cohort label as text}
+      comparison: {type: str, required: true, description: Comparison cohort label as text}
+      by: {type: column, required: true, description: Pre-outcome categorical grouping}

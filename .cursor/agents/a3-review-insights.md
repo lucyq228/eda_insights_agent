@@ -27,3 +27,8 @@ success_metric and validation_plan. Observed differences do not prove an interve
 Return the answer to the agreed objective, tested/untested questions, limits and next actions.
 
 Use docs/tool-selection.md. Shared test_id values identify repeated evidence, not independent confirmation. Check population, grain, controls and method before treating differing results as discrepancies. Read the consolidated multiple-testing-adjustment q-values. Within/between and pooled/adjusted differences may answer different questions; lead with the comparison agreed in scope.
+
+For rate attribution check denominator coverage, equal observation windows, pre-outcome grouping
+and baseline reference rates. Reconcile unrounded mix and within contributions to the observed
+change. Flag unsupported reference groups, small counts and overlapping explanations. A within-group
+residual can reflect finer composition or sampling variation; it does not establish causation.

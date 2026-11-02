@@ -51,3 +51,18 @@ Each key insight displays unique supporting tool tags beside strength and confid
 Tags come from valid cited result records, use canonical names, and exclude uncited
 analyses. Agents only need to cite evidence normally; no separate tool list is required.
 The Markdown report lists the same tools. Rebuild reports to show tags in existing runs.
+
+## Changes in event rates
+
+First compare events and eligible units in each cohort. For one observed binary outcome per
+eligible row, use `rate-change-decomposition` when group composition could explain the change.
+For example, use `{"cohort":"launch_wave","baseline":"A","comparison":"B","by":"entry_channel"}`.
+Declare cohort and grouping as drivers or segments with timing verified before the outcome.
+Confirm unique units and comparable observation windows separately. Aggregate inputs containing
+rates or exposure counts require a different denominator treatment.
+
+The benchmark applies baseline group rates to comparison counts. Benchmark minus baseline is
+mix; comparison minus benchmark is within-group change. Both contributions use percentage points.
+Missing group labels are retained. A comparison-only group leaves full attribution undefined.
+Use another grouping or shelf tool for a distinct, reasoned question; summing explanations
+from overlapping groupings double counts the same change.

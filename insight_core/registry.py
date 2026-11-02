@@ -93,6 +93,9 @@ def step_columns(tool_id: str, params: dict, scope: dict, profile: dict) -> list
 
 def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: list[str]) -> dict:
     """Deterministic verdict for one step: ok | partial | blocked, with reasons."""
+    rate_change = tool_id == "rate-change-decomposition"
+    if rate_change and params.get("view"):
+        return {"verdict": "blocked", "reasons": ["rate decomposition requires unit-level prepared rows"], "warnings": []}
     if params.get("view"):
         from .views import view_scope_profile
         try:
@@ -124,6 +127,24 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
         if pspec.get("required") and not params.get(name):
             reasons.append(f"param '{name}' is required")
 
+    if rate_change:
+        cohort, by = params.get("cohort"), params.get("by")
+        if cohort == by:
+            reasons.append("cohort and grouping must be distinct")
+        allowed = set(resolved_drivers(scope, profile)) | set(scope.get("segments", []))
+        for field in (cohort, by):
+            if field not in allowed or field in (scope.get("id_column"), scope.get("entity_column")):
+                reasons.append(f"'{field}' must be a scoped driver or segment, distinct from unit identifiers")
+            if field in cols and cols[field]["type"] not in ("binary", "categorical"):
+                reasons.append(f"'{field}' must be categorical or binary")
+        labels = [params.get(key) for key in ("baseline", "comparison")]
+        if not all(isinstance(label, str) and label.strip() for label in labels) or labels[0] == labels[1]:
+            reasons.append("provide two distinct cohort labels as text")
+        elif cohort in cols and "levels" in cols[cohort]:
+            known = {item["level"] for item in cols[cohort]["levels"]}
+            if not set(labels) <= known:
+                reasons.append("requested cohort label missing from profile")
+
     excluded = {e["column"] for e in scope.get("exclude", [])}
     for c in step_columns(tool_id, params, scope, profile):
         if c not in cols:
@@ -131,9 +152,9 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
             continue
         if c == target["column"]:
             reasons.append(f"'{c}' is the target; it cannot also be a driver")
-        if c in excluded and not tool.get("descriptive"):
+        if c in excluded and (rate_change or not tool.get("descriptive")):
             reasons.append(f"'{c}' is excluded in the scope")
-        if c in leakage and not tool.get("descriptive"):
+        if c in leakage and (rate_change or not tool.get("descriptive")):
             reasons.append(f"'{c}' looks like target leakage; add it to exclude or justify it")
         if cols[c]["type"] not in USABLE_TYPES and not tool.get("descriptive"):
             reasons.append(f"'{c}' is type '{cols[c]['type']}', not usable as a driver")
@@ -168,14 +189,14 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
             if str(params.get("time_effects", True)).lower() not in ("false", "0", "no", "off") \
                     and not scope.get("date_column"):
                 warnings.append("no date_column, so period-wide swings are not removed from the within estimate")
-    elif ent and tool_id != "correlation-matrix":
+    elif ent and tool_id != "correlation-matrix" and not rate_change:
         warnings.append(f"panel data: this tool pools all {ent} rows and its CIs treat them as independent; "
                         "compare with within-between-correlation or within-between-regression")
 
     by = params.get("by")
     if "categorical_by" in tool.get("needs", []) and by in cols and cols[by]["type"] not in ("categorical", "binary"):
         reasons.append("target-by-group requires categorical groups; use target-by-numeric-bins for numeric features")
-    if by and by in cols:
+    if by and by in cols and not rate_change:
         shown_levels = cols[by].get("levels", [])
         levels = [lv for lv in shown_levels if lv["count"] >= min_n]
         if "levels" not in cols[by]:

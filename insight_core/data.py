@@ -165,5 +165,8 @@ def target_candidates(df: pd.DataFrame, types: dict[str, str]) -> list[dict]:
 
 def encode_binary(s: pd.Series, positive_class) -> pd.Series:
     if pd.api.types.is_numeric_dtype(s) and set(s.dropna().unique()) <= {0, 1}:
-        return s.astype(float)
+        values = s.astype(float)
+        if str(positive_class).lower() in ("0", "0.0", "false"):
+            return 1 - values
+        return values
     return s.map(lambda v: np.nan if pd.isna(v) else float(str(v) == str(positive_class)))

@@ -157,3 +157,62 @@ def period_comparison(ctx, params):
             "contributions": pd.DataFrame([{"component": f, "contribution": v} for f, v in contributions.items()])},
             "charts": [], "flags": ["Unequal calendar windows; totals include exposure differences"] if a["calendar_days"] != b["calendar_days"] else [],
             "notes": ["Exact accounting attribution, not causal effects or a forecast of intervention lift."]}
+
+
+def rate_change_decomposition(ctx, params):
+    """Standardize the comparison cohort to baseline group rates on the prepared binary target."""
+    cohort, by = params["cohort"], params["by"]
+    labels = ctx.df[cohort].astype("string")
+    flags = []
+    if labels.isna().any():
+        flags.append(f"{labels.isna().sum()} prepared rows lack a cohort and cannot be assigned.")
+    unit_id = ctx.scope.get("id_column")
+    if unit_id:
+        keys = ctx.df.loc[labels.isin([params["baseline"], params["comparison"]]), unit_id]
+        if keys.isna().any() or keys.duplicated().any():
+            raise ValueError("The declared unit ID must be present and unique across the selected cohorts")
+    cohorts, groups = [], []
+    for role in ("baseline", "comparison"):
+        label = params[role]
+        selected = ctx.df.loc[labels.eq(label)]
+        if selected.empty:
+            raise ValueError(f"No eligible rows in {role} cohort {label!r}")
+        outcomes = selected[ctx.target]
+        if not outcomes.isin([0, 1]).all():
+            raise ValueError("Expected one observed binary outcome per eligible unit")
+        counts = selected.groupby(by, dropna=False, observed=True)[ctx.target].agg(["size", "sum"])
+        counts.columns = [f"{role}_n", f"{role}_events"]
+        groups.append(counts)
+        cohorts.append({"role": role, "cohort": label, "n": len(selected),
+                        "events": int(outcomes.sum()), "rate": outcomes.mean()})
+
+    table = pd.concat(groups, axis=1).fillna(0).astype(int)
+    base, comp = cohorts
+    for row in cohorts:
+        role = row["role"]
+        n = table[f"{role}_n"]
+        table[f"{role}_share"] = n / row["n"]
+        table[f"{role}_rate"] = table[f"{role}_events"] / n.where(n > 0)
+        if ((n > 0) & (n < ctx.min_n)).any():
+            flags.append(f"Small {role} groups retained for reconciliation; interpret their rates cautiously.")
+    table["expected_events"] = (table.comparison_n * table.baseline_rate).where(table.comparison_n > 0, 0)
+    table["within_pp"] = 100 * (table.comparison_events - table.expected_events) / comp["n"]
+    table["mix_pp"] = 100 * (table.comparison_share - table.baseline_share) * table.baseline_rate
+    delta = 100 * (comp["rate"] - base["rate"])
+    n = base["n"] + comp["n"]
+    findings = [finding("Observed rate change (pp)", "rate_change_pp", delta, n)]
+    if table.expected_events.isna().any():
+        flags.append("A comparison group has no baseline rate. Full attribution is undefined.")
+    else:
+        benchmark = table.expected_events.sum() / comp["n"]
+        mix, within = table.mix_pp.sum(), table.within_pp.sum()
+        if not np.isclose(mix + within, delta, rtol=0, atol=1e-10):
+            raise ValueError("Group contributions do not reconcile to the observed change")
+        findings.extend([finding("Comparison rate at baseline group rates", "benchmark_rate", benchmark, comp["n"]),
+                         finding("Mix contribution (pp)", "mix_pp", mix, n),
+                         finding("Within-group contribution (pp)", "within_pp", within, n)])
+    return {"summary": f"Rate change {delta:+.2f} pp, grouped by {by} using baseline reference rates",
+            "findings": findings, "tables": {"cohorts": pd.DataFrame(cohorts),
+            "groups": table.rename_axis("group").reset_index()}, "flags": flags, "charts": [],
+            "notes": ["Rates and shares are fractions. Contributions are percentage points.",
+                      "Descriptive attribution uses one eligible prepared row per unit."]}

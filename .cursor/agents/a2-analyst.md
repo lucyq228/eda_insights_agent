@@ -29,3 +29,8 @@ validation plan. No guaranteed lift. Send evidence and the disposition of every 
 including conditional questions not pursued, to the independent reviewer.
 
 Use canonical tool names and docs/tool-selection.md. Reuse existing evidence when the sample, variables, method and controls match. A shared test_id means one test across multiple displays. Do not rerun adjusted-correlation with only a grouping already covered by correlation-by-group unless the sample or question changes. Keep random-forest importance separate from the accompanying linear coefficients.
+
+For rate-change-decomposition verify unit grain, missing outcomes and cohort maturity against
+preparation evidence. Inspect the baseline, benchmark and group contributions. Use a cross-tab
+or association tool if it addresses a remaining question. Keep decompositions by different
+groupings separate. Keep held-out answers and outcome-derived fields out of tool selection.

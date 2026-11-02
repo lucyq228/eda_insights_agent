@@ -35,3 +35,9 @@ After user changes, revise the proposal and rerun feasibility before confirmatio
 Do not execute substantive analysis. Return the proposal version and a clear awaiting-user handoff.
 
 Select canonical tools using the registry use_when/reuse guidance and docs/tool-selection.md. Numeric profiles use target-by-numeric-bins; categorical comparisons use target-by-group. Do not schedule equivalent tests as separate evidence. Match pooled, adjusted, within and between questions to the intended decision.
+
+For a changed event rate, verify eligible units, counts, event definition and equal follow-up.
+When composition could matter, consider up to three groupings known before the outcome, each
+with a business rationale. Start with the most relevant. Use rate-change-decomposition for
+mix and within-group attribution; combine shelf tools when they answer distinct questions.
+Treat supplied answer keys as reviewer-only checks; choose groupings from the decision and timing.
