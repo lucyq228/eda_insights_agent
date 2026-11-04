@@ -66,3 +66,34 @@ mix; comparison minus benchmark is within-group change. Both contributions use p
 Missing group labels are retained. A comparison-only group leaves full attribution undefined.
 Use another grouping or shelf tool for a distinct, reasoned question; summing explanations
 from overlapping groupings double counts the same change.
+
+## Screening dimensions for changes in counts and rates
+
+For a broad change investigation include `dimension_omissions` in the scope (an empty object
+when every eligible dimension is screened). Plan one initial step per distinct eligible dimension,
+with a common metric, baseline and comparison. Use the full profile to identify meaningful grouping
+fields. The scope validator checks categorical and binary columns except identifiers, target and
+period roles. Record omitted fields as column-to-reason pairs, including timing, inadequate coverage
+or duplicate labels (name the representative and verify the one-to-one mapping). For specific
+single-group questions the usual focused scope is sufficient.
+
+Use `count-change-contribution` for a numeric additive count or a prepared binary indicator whose
+sum counts events. For individual units use a unique ID per period; for pre-aggregated counts confirm
+disjoint groups, source keys, complete observation, and that preparation preserved the input totals.
+A group missing in an observed period is unknown unless the source guarantees zero; only then set
+`absent_is_zero` to true. Periods must cover comparable exposure and use the same units.
+
+Example params: `{"cohort":"period","baseline":"3","comparison":"4","by":"channel"}`.
+The default compares to the specified prior period. Add `"history":["1","2","3"]` only when there
+are at least three consecutive, equally spaced pre-periods, the comparison immediately follows,
+and extrapolation is justified. Supply labels exactly as stored. The tool fits a straight line
+to each group's history and projects one period ahead. Inspect pre-period stability, seasonality
+and missing counts before interpreting the gap. Never estimate a baseline from comparison outcomes.
+
+For rates, reuse the existing tool and inspect both group shares and within-group rate changes.
+Look for countervailing shifts even when totals reconcile to zero. Prioritize up to three deep
+dives after the screen, including plausible interactions. No limit applies to the initial screen.
+For each planned screen the review supplies a `dimension_coverage` entry keyed by step ID, e.g.
+`{"H1.S1":{"status":"movement","reason":"Group losses of 12 offset gains of 12."}}`.
+Use movement, little movement, or unresolved against the agreed business threshold. Cite group
+magnitudes, uncertainty and data gaps. The report combines these entries with scoped omissions.

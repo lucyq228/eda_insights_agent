@@ -36,8 +36,9 @@ Do not execute substantive analysis. Return the proposal version and a clear awa
 
 Select canonical tools using the registry use_when/reuse guidance and docs/tool-selection.md. Numeric profiles use target-by-numeric-bins; categorical comparisons use target-by-group. Do not schedule equivalent tests as separate evidence. Match pooled, adjusted, within and between questions to the intended decision.
 
-For a changed event rate, verify eligible units, counts, event definition and equal follow-up.
-When composition could matter, consider up to three groupings known before the outcome, each
-with a business rationale. Start with the most relevant. Use rate-change-decomposition for
-mix and within-group attribution; combine shelf tools when they answer distinct questions.
-Treat supplied answer keys as reviewer-only checks; choose groupings from the decision and timing.
+For broad count or rate change investigations, use dimension_omissions per docs/tool-selection.md.
+Agree on the metric, comparable periods, baseline, and meaningful movement before screening.
+Inventory all eligible business dimensions. Screen each distinct pre-outcome dimension in the
+initial pathway; explain duplicates, exclusions and unavailable comparisons in the proposal.
+Use count-change-contribution for disjoint counts and rate-change-decomposition for event rates.
+Reserve the up-to-three guideline for initial deep dives after screening. Keep answer keys for review.

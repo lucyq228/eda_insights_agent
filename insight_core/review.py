@@ -97,7 +97,12 @@ def challenges(run_dir: Path) -> dict:
         prompts.insert(0, f"Panel data ({ent}): lead with within-{ent} estimates (the same {ent} over time), report "
                           f"between-{ent} separately (n = entities), and do not headline a pooled estimate the panel "
                           "tools contradict (PANEL SPLIT flags).")
-    return {"results": per_result, "hypotheses": by_h, "prompts": prompts}
+    checks = {"results": per_result, "hypotheses": by_h, "prompts": prompts}
+    if "dimension_omissions" in scope:
+        checks["dimension_screens"] = {s["step_id"]: s["params"]["by"] for s in registry.change_steps(scope)}
+        checks["dimension_omissions"] = scope["dimension_omissions"]
+        prompts.append("Inspect group-level offsets, verify omitted or equivalent fields, and complete dimension_coverage.")
+    return checks
 
 
 def _check_evidence(evidence: list, results: dict, where: str) -> list[str]:
@@ -122,6 +127,24 @@ def validate_review(draft: dict, run_dir: Path) -> list[str]:
     scope = read_artifact(run_dir, "approved_scope.json")
     results = load_results(run_dir)
     errs = []
+    if "dimension_omissions" in scope:
+        coverage = draft.get("dimension_coverage")
+        steps = registry.change_steps(scope)
+        if not isinstance(coverage, dict) or set(coverage) != {s["step_id"] for s in steps}:
+            errs.append("dimension_coverage must address every planned change screen by step ID")
+        else:
+            for step in steps:
+                label = step["step_id"]
+                row = coverage[label]
+                if (not isinstance(row, dict)
+                        or row.get("status") not in ("movement", "little movement", "unresolved")
+                        or not isinstance(row.get("reason"), str) or not row["reason"].strip()):
+                    errs.append(f"{label}: supply coverage status and a reason based on group contributions")
+                    continue
+                result = results.get(label, {})
+                required = "mix_pp" if step["tool"] == "rate-change-decomposition" else "net_change"
+                if required not in {f["metric"] for f in result.get("findings", [])} and row["status"] != "unresolved":
+                    errs.append(f"{label}: missing attribution evidence requires unresolved status")
     ids = {h["id"] for h in scope["hypotheses"]}
     waiver_artifact = read_artifact(run_dir, "step_waivers.json") or {}
     waivers = ({w["step_id"] for w in waiver_artifact.get("waivers", [])}

@@ -93,9 +93,10 @@ def step_columns(tool_id: str, params: dict, scope: dict, profile: dict) -> list
 
 def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: list[str]) -> dict:
     """Deterministic verdict for one step: ok | partial | blocked, with reasons."""
-    rate_change = tool_id == "rate-change-decomposition"
-    if rate_change and params.get("view"):
-        return {"verdict": "blocked", "reasons": ["rate decomposition requires unit-level prepared rows"], "warnings": []}
+    count_change = tool_id == "count-change-contribution"
+    change = count_change or tool_id == "rate-change-decomposition"
+    if change and params.get("view"):
+        return {"verdict": "blocked", "reasons": ["change tools require the approved base grain"], "warnings": []}
     if params.get("view"):
         from .views import view_scope_profile
         try:
@@ -127,16 +128,18 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
         if pspec.get("required") and not params.get(name):
             reasons.append(f"param '{name}' is required")
 
-    if rate_change:
+    if change:
         cohort, by = params.get("cohort"), params.get("by")
         if cohort == by:
             reasons.append("cohort and grouping must be distinct")
         allowed = set(resolved_drivers(scope, profile)) | set(scope.get("segments", []))
         for field in (cohort, by):
-            if field not in allowed or field in (scope.get("id_column"), scope.get("entity_column")):
+            scoped_date = count_change and field == cohort == scope.get("date_column")
+            if (field not in allowed and not scoped_date) or field in (scope.get("id_column"), scope.get("entity_column")):
                 reasons.append(f"'{field}' must be a scoped driver or segment, distinct from unit identifiers")
-            if field in cols and cols[field]["type"] not in ("binary", "categorical"):
-                reasons.append(f"'{field}' must be categorical or binary")
+            supported = ("binary", "categorical", "numeric", "datetime") if count_change and field == cohort else ("binary", "categorical")
+            if field in cols and cols[field]["type"] not in supported:
+                reasons.append(f"'{field}' has an unsupported period or grouping type")
         labels = [params.get(key) for key in ("baseline", "comparison")]
         if not all(isinstance(label, str) and label.strip() for label in labels) or labels[0] == labels[1]:
             reasons.append("provide two distinct cohort labels as text")
@@ -145,6 +148,16 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
             if not set(labels) <= known:
                 reasons.append("requested cohort label missing from profile")
 
+    if count_change:
+        history = params.get("history")
+        if "history" in params and not (isinstance(history, list) and len(history) >= 3
+                and all(isinstance(item, str) and item for item in history)
+                and len(set(history)) == len(history) and history[-1] == params.get("baseline")
+                and params.get("comparison") not in history):
+            reasons.append("trend requires at least three distinct ordered pre-period labels ending at baseline")
+        if "absent_is_zero" in params and not isinstance(params["absent_is_zero"], bool):
+            reasons.append("absent_is_zero must be a boolean")
+
     excluded = {e["column"] for e in scope.get("exclude", [])}
     for c in step_columns(tool_id, params, scope, profile):
         if c not in cols:
@@ -152,9 +165,9 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
             continue
         if c == target["column"]:
             reasons.append(f"'{c}' is the target; it cannot also be a driver")
-        if c in excluded and (rate_change or not tool.get("descriptive")):
+        if c in excluded and (change or not tool.get("descriptive")):
             reasons.append(f"'{c}' is excluded in the scope")
-        if c in leakage and (rate_change or not tool.get("descriptive")):
+        if c in leakage and (change or not tool.get("descriptive")):
             reasons.append(f"'{c}' looks like target leakage; add it to exclude or justify it")
         if cols[c]["type"] not in USABLE_TYPES and not tool.get("descriptive"):
             reasons.append(f"'{c}' is type '{cols[c]['type']}', not usable as a driver")
@@ -189,14 +202,14 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
             if str(params.get("time_effects", True)).lower() not in ("false", "0", "no", "off") \
                     and not scope.get("date_column"):
                 warnings.append("no date_column, so period-wide swings are not removed from the within estimate")
-    elif ent and tool_id != "correlation-matrix" and not rate_change:
+    elif ent and tool_id != "correlation-matrix" and not change:
         warnings.append(f"panel data: this tool pools all {ent} rows and its CIs treat them as independent; "
                         "compare with within-between-correlation or within-between-regression")
 
     by = params.get("by")
     if "categorical_by" in tool.get("needs", []) and by in cols and cols[by]["type"] not in ("categorical", "binary"):
         reasons.append("target-by-group requires categorical groups; use target-by-numeric-bins for numeric features")
-    if by and by in cols and not rate_change:
+    if by and by in cols and not change:
         shown_levels = cols[by].get("levels", [])
         levels = [lv for lv in shown_levels if lv["count"] >= min_n]
         if "levels" not in cols[by]:
@@ -245,3 +258,8 @@ def plan_steps(scope: dict) -> list[dict]:
             steps.append({"step_id": f"{h['id']}.S{i}", "hypothesis": h["id"], "tool": step["tool"],
                           "params": step.get("params", {}), "purpose": step.get("purpose", "")})
     return steps
+
+
+def change_steps(scope: dict) -> list[dict]:
+    return [step for step in plan_steps(scope)
+            if step["tool"] in ("rate-change-decomposition", "count-change-contribution")]

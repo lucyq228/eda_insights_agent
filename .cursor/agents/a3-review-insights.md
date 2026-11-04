@@ -32,3 +32,8 @@ For rate attribution check denominator coverage, equal observation windows, pre-
 and baseline reference rates. Reconcile unrounded mix and within contributions to the observed
 change. Flag unsupported reference groups, small counts and overlapping explanations. A within-group
 residual can reflect finer composition or sampling variation; it does not establish causation.
+
+For broad count/rate change investigations, provide dimension_coverage as specified in
+docs/tool-selection.md. Check that one-to-one labels really represent the same groups, verify
+positive and negative contributions separately, and describe unresolved coverage before concluding
+there is little movement. Compare each dimension's attribution to the same total.

@@ -216,3 +216,62 @@ def rate_change_decomposition(ctx, params):
             "groups": table.rename_axis("group").reset_index()}, "flags": flags, "charts": [],
             "notes": ["Rates and shares are fractions. Contributions are percentage points.",
                       "Descriptive attribution uses one eligible prepared row per unit."]}
+
+
+def count_change_contribution(ctx, params):
+    """Sum disjoint counts and compare each group with the same historical baseline."""
+    by, period = params["by"], params["cohort"]
+    history = params.get("history", [params["baseline"]])
+    periods = [*history, params["comparison"]]
+    labels = ctx.df[period].astype("string")
+    if labels.isna().any():
+        raise ValueError("Missing period labels prevent complete count attribution")
+    if "history" in params:
+        numbers = pd.to_numeric(pd.Series(periods), errors="coerce")
+        if numbers.notna().all():
+            intervals = np.diff(numbers)
+            if intervals[0] <= 0 or not np.allclose(intervals, intervals[0]):
+                raise ValueError("Trend periods must be consecutive equally spaced observations in ascending order")
+        elif pd.api.types.is_datetime64_any_dtype(ctx.df[period]):
+            dates = pd.DatetimeIndex(periods)
+            if not dates.is_monotonic_increasing or pd.infer_freq(dates) is None:
+                raise ValueError("Trend dates must follow a regular increasing calendar frequency")
+    selected = ctx.df.loc[labels.isin(periods)]
+    values = selected[ctx.target]
+    if not (np.isfinite(values) & values.ge(0) & values.mod(1).eq(0)).all():
+        raise ValueError("Count target must contain finite nonnegative integers")
+    unit = ctx.scope.get("id_column")
+    if unit and (selected[unit].isna().any() or selected.duplicated([period, unit]).any()):
+        raise ValueError("Declared row identifiers must be unique within each period")
+    # Internal names keep source fields independent of generated result columns.
+    cells = pd.DataFrame({"group": selected[by], "period": labels.loc[selected.index], "n": values})
+    counts = cells.groupby(["group", "period"], dropna=False, observed=True).n.sum().unstack()
+    if not set(periods).issubset(counts.columns):
+        raise ValueError("At least one requested period has no observations")
+    counts = counts[periods]
+    if counts.isna().any().any() and not params.get("absent_is_zero", False):
+        raise ValueError("Missing group-period counts; verify coverage before treating absence as zero")
+    counts = counts.fillna(0)
+    expected = counts[params["baseline"]]
+    if "history" in params:
+        # Least-squares projection one equally spaced period beyond the history.
+        time = np.arange(len(history))
+        centered = time - time.mean()
+        slopes = counts[history].dot(centered) / (centered @ centered)
+        expected = counts[history].mean(axis=1) + slopes * (len(history) - time.mean())
+        if (expected < -1e-10).any():
+            raise ValueError("Pre-period trend projects negative counts; select a defensible baseline")
+        expected = expected.clip(lower=0)
+    actual = counts[params["comparison"]]
+    gaps = actual - expected
+    loss, gain = gaps.clip(upper=0).sum(), gaps.clip(lower=0).sum()
+    delta = actual.sum() - expected.sum()
+    if not np.isclose(loss + gain, delta, atol=1e-8, rtol=1e-12):
+        raise ValueError("Group contributions do not reconcile to total count change")
+    metrics = [("Expected count", "expected_count", expected.sum()), ("Observed count", "observed_count", actual.sum()),
+               ("Losses", "losses", loss), ("Gains", "gains", gain), ("Net change", "net_change", delta)]
+    groups = pd.DataFrame({"expected": expected, "observed": actual, "contribution": gaps}).reset_index()
+    return {"summary": f"{by}: losses {loss:+g}, gains {gain:+g}, net {delta:+g}",
+            "findings": [finding(label, metric, value, len(selected)) for label, metric, value in metrics],
+            "tables": {"groups": groups}, "flags": [], "charts": [],
+            "notes": ["Each dimension explains the same total. Contributions are descriptive counts."]}

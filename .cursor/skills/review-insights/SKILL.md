@@ -20,3 +20,6 @@ assumptions, risks, success_metric, validation_plan. Proposals must acknowledge 
 limits and be framed as experiments when causal support is absent.
 Challenge missing mechanisms, wrong grain, exposure differences, unstable segments,
 repeated entities, rank deficiency, and overbroad null conclusions. Report unanswered questions.
+
+When the approved scope contains dimension_omissions, address each planned change screen in
+dimension_coverage (see docs/tool-selection.md). Check opposing group changes even if the net is small.

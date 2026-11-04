@@ -103,6 +103,30 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
     for q in scope.get("user_questions", []):
         if not q.get("question") or not q.get("why_it_matters"):
             errors.append(f"question {q.get('id')}: needs 'question' and 'why_it_matters'")
+    if "dimension_omissions" in scope and not errors:
+        omitted = scope["dimension_omissions"]
+        steps = registry.change_steps(scope)
+        if not isinstance(omitted, dict) or any(c not in cols or not isinstance(r, str) or not r.strip()
+                                                for c, r in omitted.items()):
+            errors.append("dimension_omissions must map known columns to reasons")
+        elif not steps:
+            errors.append("dimension coverage requires an initial count or rate change screen")
+        else:
+            first = steps[0]
+            benchmark_keys = ("cohort", "baseline", "comparison", "history")
+            for step in steps[1:]:
+                if step["tool"] != first["tool"] or any(step["params"].get(k) != first["params"].get(k) for k in benchmark_keys):
+                    errors.append("dimension screens must compare the same KPI, periods and baseline method")
+                    break
+            screened = {step["params"].get("by") for step in steps}
+            roles = {tc, scope.get("id_column"), scope.get("entity_column"), scope.get("date_column")}
+            roles.update(step["params"].get("cohort") for step in steps)
+            candidates = {c for c, info in cols.items() if info["type"] in ("binary", "categorical")} - roles
+            missing = candidates - screened - omitted.keys()
+            if missing:
+                errors.append(f"screen or explain omitted dimensions: {sorted(missing)}")
+            if screened.intersection(omitted):
+                errors.append("screened dimensions cannot also be omitted")
     return errors, warnings
 
 
@@ -168,6 +192,12 @@ def proposal_markdown(scope: dict, version: int) -> str:
         if not h["pathway"]:
             label += " (conditional; select after evidence)"
         lines.append(f"| {i}. {cell(h['statement'])} | {cell(purpose)} | {cell(label)} |")
+    if "dimension_omissions" in scope:
+        lines += ["", "## Dimension coverage", ""]
+        for step in registry.change_steps(scope):
+            lines.append(f"- {cell(step['params'].get('by'))}: {cell(step['purpose'])}")
+        for column, reason in scope["dimension_omissions"].items():
+            lines.append(f"- {cell(column)}: {cell(reason)}")
     for key, title in (("assumptions", "Assumptions"), ("out_of_scope", "Boundaries and gaps")):
         if scope.get(key):
             lines += ["", f"## {title}", ""] + [f"- {x}" for x in scope[key]]

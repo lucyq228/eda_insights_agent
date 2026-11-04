@@ -435,3 +435,17 @@ tools:
       baseline: {type: str, required: true, description: Baseline cohort label as text}
       comparison: {type: str, required: true, description: Comparison cohort label as text}
       by: {type: column, required: true, description: Pre-outcome categorical grouping}
+  count-change-contribution:
+    phase: analysis
+    function: insight_core.tools_business:count_change_contribution
+    question: Which groups account for the gap between observed and expected counts?
+    target_types: [numeric, binary]
+    descriptive: true
+    use_when: The scoped target sums to a count across disjoint groups in each comparable period.
+    params:
+      cohort: {type: column, required: true, description: Period label or scoped date}
+      baseline: {type: str, required: true, description: Prior comparable period label}
+      comparison: {type: str, required: true, description: Comparison period label}
+      by: {type: column, required: true, description: Pre-outcome business dimension}
+      history: {type: list, description: Optional ordered consecutive equally spaced pre-period labels ending at baseline. Comparison must immediately follow.}
+      absent_is_zero: {type: bool, description: True only when the source guarantees an absent group in an observed period means zero count.}

@@ -64,6 +64,19 @@ def supporting_tools(insight: dict, results: dict) -> list[str]:
     return names
 
 
+def dimension_rows(scope, review):
+    if "dimension_omissions" not in scope:
+        return []
+    rows = []
+    for step in registry.change_steps(scope):
+        label = step["step_id"]
+        entry = review.get("dimension_coverage", {}).get(label, {})
+        rows.append((step["params"]["by"], entry.get("status", "unresolved"),
+                     entry.get("reason", ""), label))
+    rows.extend((name, "omitted", reason, "") for name, reason in scope["dimension_omissions"].items())
+    return rows
+
+
 def build(run_dir: Path) -> dict:
     scope = read_artifact(run_dir, "approved_scope.json")
     insights = read_artifact(run_dir, "insights.json")
@@ -106,6 +119,12 @@ def build(run_dir: Path) -> dict:
         md += [f"![{ins['id']}](charts/{Path(i).name})" for i in imgs] + [""]
         blocks.append((ins, ev_lines, imgs))
 
+    coverage = dimension_rows(scope, review)
+    if coverage:
+        md += ["## Dimension coverage", "", "| Dimension | Status | Evidence or reason | Result |", "|---|---|---|---|"]
+        for row in coverage:
+            md.append("| " + " | ".join(str(v).replace("|", "/").replace("\n", " ") for v in row) + " |")
+        md.append("")
     md += ["## Proposed business actions", ""]
     for rec in insights.get("recommendations", []):
         md += [f"### {rec['action']}", rec['rationale'],
@@ -148,6 +167,12 @@ def _html(scope, insights, review, blocks, prep, dq, results, skipped) -> str:
             + "".join(f'<p class="caveat">Caveat: {e(c)}</p>' for c in ins.get("caveats", []))
             + (f'<p class="next">Next step: {e(ins["suggested_next_step"])}</p>' if ins.get("suggested_next_step") else "")
             + f'<div class="imgs">{"".join(_img(i) for i in imgs)}</div></section>')
+    coverage_html = ""
+    coverage = dimension_rows(scope, review)
+    if coverage:
+        body = "".join("<tr>" + "".join(f"<td>{e(str(v))}</td>" for v in row) + "</tr>" for row in coverage)
+        coverage_html = ("<h2>Dimension coverage</h2><table><tr><th>Dimension</th><th>Status</th>"
+                         "<th>Evidence or reason</th><th>Result</th></tr>" + body + "</table>")
     verdicts = "".join(f"<tr><td>{e(v['id'])}</td><td class='v-{e(v['verdict'])}'>{e(v['verdict'])}</td>"
                        f"<td>{e(v['reasoning'])}</td></tr>" for v in review["hypothesis_verdicts"])
     lims = "".join(f"<li>{e(x)}</li>" for x in insights.get("limitations", []))
@@ -184,7 +209,7 @@ table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #d9e2ec;pad
 {panel_html}
 <h2>Summary</h2><p>{e(insights['headline_summary'])}</p>
 <h2>Key insights</h2>{''.join(cards)}
-<h2>Proposed business actions</h2>{actions}<h2>Hypothesis verdicts</h2><table><tr><th>Hypothesis</th><th>Verdict</th><th>Reasoning</th></tr>{verdicts}</table>
+{coverage_html}<h2>Proposed business actions</h2>{actions}<h2>Hypothesis verdicts</h2><table><tr><th>Hypothesis</th><th>Verdict</th><th>Reasoning</th></tr>{verdicts}</table>
 <h2>Limitations</h2><ul>{lims}</ul><h2>Recommended next steps</h2><ul>{nexts}</ul>
 <h2>Appendix</h2><p>Data quality: {e(str(dq.get('summary', 'n/a')))}</p>
 <ul>{''.join(f'<li>{e(x)}</li>' for x in prep.get('log', []))}</ul><h3>Analyses run</h3><ul>{runs}</ul>

@@ -34,3 +34,7 @@ For rate-change-decomposition verify unit grain, missing outcomes and cohort mat
 preparation evidence. Inspect the baseline, benchmark and group contributions. Use a cross-tab
 or association tool if it addresses a remaining question. Keep decompositions by different
 groupings separate. Keep held-out answers and outcome-derived fields out of tool selection.
+
+For dimension screens, verify row grain, completeness, and the baseline before execution. Inspect
+losses and offsets by group even when the net is small. Choose up to three initial deep dives using
+size, opposing movements and a plausible explanation. Use other shelf tools for distinct questions.

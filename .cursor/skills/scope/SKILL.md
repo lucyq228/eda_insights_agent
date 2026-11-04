@@ -29,3 +29,6 @@ All new scopes require confirmation of the presented version. Routine analysis w
 The target overview runs automatically in the post-confirmation data-quality stage. Do not put
 eda-overview, profiling, preparation, multiple-testing-adjustment or reporting tools into an analysis pathway.
 Initial pathways and candidate_tools must name selectable analysis tools from read_context.py.
+
+For broad KPI count/rate change requests, include dimension_omissions and initial screens per
+docs/tool-selection.md. Explain each exclusion and the shared baseline in the proposed scope.
