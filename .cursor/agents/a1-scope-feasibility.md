@@ -55,3 +55,6 @@ For aggregated event rates scope a numeric event-count target and denominator pa
 binary unit outcomes confirm eligibility and maturity. For counts verify additivity, including
 unique-customer assignments before analysis. Preserve legitimate repeated events; never assume
 identical rows are duplicates. Resolve unsupported grain/input requirements during scoping.
+
+Clarify the audience and intended decision in the existing scope fields. Both an original
+analytical report and a separate executive presentation will use this same approved evidence.

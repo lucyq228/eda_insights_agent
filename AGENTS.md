@@ -23,3 +23,8 @@ Lifecycle: request -> profile -> scope + feasibility -> activate -> analyst inve
 
 Use `.venv/Scripts/python.exe` on Windows or `python` on Linux with
 `.cursor/skills/<skill>/scripts/<script>.py`. See docs/architecture.md and examples/qvi_scope.json.
+
+
+Reporting: preserve report.html and report.md as the analytical checkpoint. The analyst then
+drafts the executive storyline using executive-report/SKILL.md; the existing reviewer checks
+its evidence and renders executive_report.html. Finalize and deliver all three files.

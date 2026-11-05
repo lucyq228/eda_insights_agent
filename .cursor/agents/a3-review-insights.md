@@ -49,3 +49,9 @@ Broad coverage is required even if omission metadata was forgotten. Check numeri
 preparation row and metric reconciliation, and disjoint count or event/eligible grain. Missing
 outcomes are not negatives and missing coverage is not zero. For aggregated rates verify summed
 events/eligible counts and do not interpret unweighted count correlations as rate associations.
+
+Keep report.html/report.md as the original analytical checkpoint. After the analyst drafts
+the executive storyline, follow executive-report/SKILL.md: verify claims, numeric prose,
+charts, benchmark coverage and reconciled contributions, then render executive_report.html.
+Presentation is a second pass by this reviewer, not a fourth agent or new investigation.
+Return both reports; new evidence must go through the normal review/checkpoint rebuild.

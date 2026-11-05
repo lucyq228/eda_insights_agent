@@ -21,7 +21,11 @@ a3-review-insights. These remain three roles, not four.
    Stop at adequate answers, exhausted evidence or budget. Do not execute all candidate tools by default.
 7. Reviewer accounts for each scoped question and requests only in-scope follow-ups. Record gaps and
    out-of-scope opportunities; do not silently expand the investigation.
-8. Save review, insights and report, then finalize. Every recommendation needs evidence and validation.
+8. Save review, insights and the original report.html/report.md checkpoint. Every recommendation
+   needs evidence and validation.
+9. Analyst drafts the executive storyline using executive-report/SKILL.md. Reviewer verifies
+   it and renders executive_report.html from saved evidence. Finalize and deliver both reports
+   (executive HTML, original HTML and Markdown). Keep the original checkpoint unchanged.
 
 Continuation: answer clarifications from existing evidence. Continue in-scope calculations within
 budget and invalidate/rebuild review/report as usual. For a new objective, dataset, population or
@@ -29,3 +33,4 @@ excluded factors, start a new run and scope discussion. Put the prior run ID and
 references in the new request/context; preserve the old locked run. Reuse context, not stale estimates
 when definitions, controls or population change. No extra agent or run-linking subsystem is needed.
 Use run_status.py to resume.
+

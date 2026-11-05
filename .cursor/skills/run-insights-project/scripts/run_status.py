@@ -19,6 +19,7 @@ ROUTE = {
     "review": "Analyst: check scoped adaptive questions first; then Reviewer: review_checks.py, save_review.py",
     "insights": "Reviewer & Insights specialist: save_insights.py",
     "report": "Reviewer & Insights specialist: build_report.py",
+    "executive_report": "Analyst: executive-report skill; Reviewer: build_executive_report.py",
 }
 
 
@@ -46,9 +47,10 @@ def main() -> None:
         out["targeted_followups"] = review["rerun_requests"]
         out["next"] = {"milestone": "review", "route": "Analyst runs each follow-up with run_tool.py, then reviewer rechecks"}
     if nxt is None:
-        out["next"] = {"milestone": "done", "route": "Analyst: finalize_run.py, then present report.html"}
+        out["next"] = {"milestone": "done", "route": "Analyst: finalize_run.py, then deliver executive_report.html AND report.html (plus report.md)"}
     emit_json(out)
 
 
 if __name__ == "__main__":
     main()
+

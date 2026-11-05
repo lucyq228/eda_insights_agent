@@ -26,3 +26,8 @@ dimension_coverage (see docs/tool-selection.md). Check opposing group changes ev
 
 For broad count screens also supply intersection_review (status, reason, evidence) as documented
 in docs/tool-selection.md. The final report includes this disposition beside dimension coverage.
+
+
+Preserve the original report.html/report.md. Hand the checkpoint to the analyst to draft
+the executive storyline using executive-report/SKILL.md. Review that presentation against
+the saved evidence and run its renderer. Final delivery includes both reports.

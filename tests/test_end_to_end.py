@@ -201,7 +201,19 @@ def test_store_sales_full_flow(tmp_path):
     html = (run.dir / "report.html").read_text(encoding="utf-8")
     assert "within region" in html and "q = " in html
     assert "Panel data: each store_id" in html and "entities = 80" in html
+    run("run-insights-project", "finalize_run", ok=False)
+    from insight_core.state import sha
+    original = (run.dir / "report.html").read_bytes()
+    story = {"checkpoint_sha256": sha(run.dir / "report.json"),
+             "title": "Sales associations", "summary": "Within-region comparisons clarify the pattern.",
+             "sections": [{"headline": "Within-region evidence matters", "message": "Compare pooled and within results.",
+                           "insight_ids": ["I1"], "result": "H2.S1", "table": next(iter(res["H2.S1"]["tables"])),
+                           "chart_omission_reason": "This check focuses on exact comparison estimates."}],
+             "conclusion": "Validate associations before intervention."}
+    run("executive-report", "build_executive_report", "--file", run.draft("executive_story.json", story))
+    assert (run.dir / "report.html").read_bytes() == original
     final = run("run-insights-project", "finalize_run")
+    assert final["executive_report_html"].endswith("executive_report.html")
     assert final["report_html"].endswith("report.html")
 
     # Tampering with the locked scope stops everything.
@@ -270,3 +282,4 @@ def test_tool_target_type_gate(tmp_path, bad_type):
     auto = run("feasibility", "check_feasibility")
     assert auto["steps"][0]["verdict"] == "blocked"
     assert any("target type" in r for r in auto["steps"][0]["reasons"])
+

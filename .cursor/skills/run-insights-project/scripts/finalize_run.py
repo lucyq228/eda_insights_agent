@@ -22,11 +22,14 @@ def main() -> None:
     insights = read_artifact(run_dir, "insights.json")
     write_artifact(run_dir, "final.json", {"finalized_at": datetime.now().isoformat(timespec="seconds"),
                                            "headline": insights["headline_summary"],
-                                           "report": str(run_dir / "report.html")})
+                                           "report": str(run_dir / "report.html"),
+                                           "executive_report": str(run_dir / "executive_report.html"),
+                                           "report_md": str(run_dir / "report.md")})
     events.emit(run_dir, "run finalized", args.actor, insights["headline_summary"][:200])
-    emit_json({"report_html": str(run_dir / "report.html"), "report_md": str(run_dir / "report.md"),
+    emit_json({"executive_report_html": str(run_dir / "executive_report.html"), "report_html": str(run_dir / "report.html"), "report_md": str(run_dir / "report.md"),
                "headline": insights["headline_summary"], "insights": [i["title"] for i in insights["insights"]]})
 
 
 if __name__ == "__main__":
     main()
+

@@ -89,3 +89,11 @@ The reviewer records intersection_review with completed, not_needed or unresolve
 and evidence. Completed needs a joint result using the same comparison and reconciling to screen
 totals. The report shows this disposition, including justified skips. Other shelf tools remain
 available for distinct questions. See docs/tool-selection.md for parameters and metric definitions.
+
+
+## Reporting handoff
+
+Reviewer saves the original analytical report → analyst drafts the executive storyline →
+reviewer checks and renders it → coordinator finalizes both reports. This is a presentation
+pass within the existing three roles. `executive_report.json` tracks checkpoint/evidence
+hashes; changed inputs require rebuilding. See [executive reporting](executive-reporting.md).

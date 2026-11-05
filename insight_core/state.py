@@ -18,6 +18,7 @@ MILESTONES = [
     ("review", "review.json", "Reviewer & Insights specialist", "analyses_index.json"),
     ("insights", "insights.json", "Reviewer & Insights specialist", "review.json"),
     ("report", "report.json", "Reviewer & Insights specialist", "insights.json"),
+    ("executive_report", "executive_report.json", "Analyst storyline / Reviewer presentation check", "report.json"),
 ]
 
 
@@ -55,6 +56,19 @@ def milestone_status(run_dir: Path) -> list[dict]:
                 status, reason = "incomplete", f"{len(data['errors'])} error(s)"
             elif name == "approval" and not _lock_ok(run_dir):
                 status, reason = "tampered", "approved_scope.json does not match scope.lock.json"
+        if status == "done" and name == "report":
+            if any(not (run_dir / f).is_file() for f in ("report.html", "report.md")):
+                status, reason = "missing", "original report files must be delivered"
+            elif data.get("evidence_sha256") and any(sha(run_dir / f) != h for f, h in data["evidence_sha256"].items()):
+                status, reason = "stale", "analytical evidence changed; rebuild the checkpoint"
+        if status == "done" and name == "executive_report":
+            from .executive import evidence_files
+            if (data.get("sources") != evidence_files(run_dir)
+                    or data.get("story_sha256") != sha(run_dir / "executive_story.json")
+                    or data.get("html_sha256") != sha(run_dir / "executive_report.html")):
+                status, reason = "stale", "presentation or checkpoint evidence changed; rebuild executive report"
+        if status == "done" and any(r["status"] != "done" for r in rows):
+            status, reason = "stale", "an earlier workflow milestone needs completion"
         rows.append({"milestone": name, "artifact": artifact, "owner": owner, "status": status, "reason": reason})
     return rows
 
@@ -73,3 +87,4 @@ def next_step(run_dir: Path) -> dict | None:
         if row["status"] != "done":
             return row
     return None
+

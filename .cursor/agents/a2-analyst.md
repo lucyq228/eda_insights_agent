@@ -55,3 +55,8 @@ metric components explicitly before change attribution. Reuse scoped dimension_b
 screens and joint partitions. Rates accept binary unit outcomes or numeric event counts with a
 denominator; selected rate intersections also use a by list. Sum counts before dividing, never
 average rates. Other tools remain available only when their grain and denominator match the question.
+
+After the reviewer saves the original report.html/report.md checkpoint, use
+executive-report/SKILL.md to draft a layered, conclusion-led storyline from reviewed evidence.
+Keep comparison groups, charts, formulas and a closing recap. Send it to the existing reviewer
+for presentation checks; finalize only after both reports are current, and deliver all files.

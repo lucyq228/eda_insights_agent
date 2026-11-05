@@ -151,7 +151,9 @@ def build(run_dir: Path) -> dict:
         md.append(f"- `{step['step_id']}` {step['tool']} (user-approved skip): {step.get('skip_reason')}")
     (run_dir / "report.md").write_text("\n".join(md) + "\n", encoding="utf-8")
     (run_dir / "report.html").write_text(_html(scope, insights, review, blocks, prep, dq, results, skipped), encoding="utf-8")
-    return {"files": ["report.md", "report.html"], "n_insights": len(insights["insights"]),
+    from .executive import evidence_files
+    fingerprints = {k: v for k, v in evidence_files(run_dir).items() if k not in ("report.json", "report.md", "report.html")}
+    return {"files": ["report.md", "report.html"], "evidence_sha256": fingerprints, "n_insights": len(insights["insights"]),
             "n_charts": sum(len(b[2]) for b in blocks)}
 
 
@@ -220,3 +222,4 @@ table{{border-collapse:collapse;width:100%}} td,th{{border:1px solid #d9e2ec;pad
 <h2>Appendix</h2><p>Data quality: {e(str(dq.get('summary', 'n/a')))}</p>
 <ul>{''.join(f'<li>{e(x)}</li>' for x in prep.get('log', []))}</ul><h3>Analyses run</h3><ul>{runs}</ul>
 </body></html>"""
+

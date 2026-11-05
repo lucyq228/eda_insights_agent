@@ -61,3 +61,12 @@ exploratory scopes. The legacy `--exploration` flag no longer bypasses confirmat
 locked runs remain readable. No additional package or agent is required.
 
 Tool selection and compatibility: see `docs/tool-selection.md`; the registry exposes canonical names and reuse guidance.
+
+
+## Executive presentation and analytical reference
+
+Each completed run delivers `executive_report.html` plus the original `report.html` and
+`report.md`. The analyst organizes reviewed findings into a layered story; the existing
+reviewer checks it and renders charts, complete comparison tables and a closing recap.
+The original hypotheses, tool evidence and review remain available unchanged. No fourth
+agent is added. See [reporting workflow and draft schema](docs/executive-reporting.md).

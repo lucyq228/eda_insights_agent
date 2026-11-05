@@ -19,8 +19,9 @@ def main() -> None:
     out = report.build(run_dir)
     write_artifact(run_dir, "report.json", out, upstream="insights.json")
     events.emit(run_dir, "report", args.actor, f"{out['n_insights']} insights, {out['n_charts']} charts")
-    emit_json({**out, "html": str(run_dir / "report.html"), "next": "coordinator finalize_run.py"})
+    emit_json({**out, "html": str(run_dir / "report.html"), "next": "Analyst: executive-report/SKILL.md, draft executive_story.json; Reviewer checks and builds it"})
 
 
 if __name__ == "__main__":
     main()
+
