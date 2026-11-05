@@ -48,3 +48,10 @@ Keep the metric, population, periods and baseline fixed. Preserve zero/missing-c
 Inspect group counts, shares and contribution_pp; do not add marginal and joint attributions.
 Pass the joint findings to review, or explain why further drilling was unnecessary or infeasible.
 Continue to use other shelf tools when they answer a distinct remaining question.
+
+
+Check preparation reconciliation: identical rows and missing targets are preserved. Resolve missing
+metric components explicitly before change attribution. Reuse scoped dimension_bins for numeric
+screens and joint partitions. Rates accept binary unit outcomes or numeric event counts with a
+denominator; selected rate intersections also use a by list. Sum counts before dividing, never
+average rates. Other tools remain available only when their grain and denominator match the question.

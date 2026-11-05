@@ -11,7 +11,7 @@ from .state import read_artifact, sha, write_artifact
 from .tools_eda import leakage_suspects
 
 ORDER = {"ok": 0, "partial": 1, "blocked": 2}
-AUTO_CHECK_VERSION = 1
+AUTO_CHECK_VERSION = 2
 
 
 def auto_check(run_dir: Path) -> dict:

@@ -31,13 +31,12 @@ tools:
   prepare-dataset:
     phase: prepare
     function: insight_core.tools_eda:prepare_dataset
-    question: Build the analysis table - dedupe, keep scoped columns, code the target, parse dates, group
-      rare levels.
+    question: Preserve rows, columns and categories; code the target and parse dates.
     params:
       rare_level_share:
         type: float
         default: 0.01
-        description: levels rarer than this share become 'Other'
+        description: Legacy parameter; ignored. Pool categories only in an explicit model view.
     outputs: datasets/prepared.parquet, prepared_data.json
   feature-target-associations:
     phase: analysis
@@ -426,7 +425,7 @@ tools:
     phase: analysis
     function: insight_core.tools_business:rate_change_decomposition
     question: How much of a change in event rate reflects group mix versus rates within groups?
-    target_types: [binary]
+    target_types: [binary, numeric]
     descriptive: true
     use_when: Compare two cohorts of eligible units with the same outcome window and a plausible pre-outcome grouping.
     reuse: Each grouping explains the same total change. Combine with other tools for distinct questions.
@@ -434,7 +433,8 @@ tools:
       cohort: {type: column, required: true, description: Scoped cohort field assigned before the outcome}
       baseline: {type: str, required: true, description: Baseline cohort label as text}
       comparison: {type: str, required: true, description: Comparison cohort label as text}
-      by: {type: column, required: true, description: Pre-outcome categorical grouping}
+      by: {type: column_or_columns, required: true, description: One pre-outcome dimension or selected intersection}
+      denominator: {type: column, description: Eligible count column for aggregated inputs; numeric target contains event counts}
   count-change-contribution:
     phase: analysis
     function: insight_core.tools_business:count_change_contribution

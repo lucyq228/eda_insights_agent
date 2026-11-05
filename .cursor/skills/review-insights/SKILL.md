@@ -21,7 +21,7 @@ limits and be framed as experiments when causal support is absent.
 Challenge missing mechanisms, wrong grain, exposure differences, unstable segments,
 repeated entities, rank deficiency, and overbroad null conclusions. Report unanswered questions.
 
-When the approved scope contains dimension_omissions, address each planned change screen in
+For broad change investigations (the default), or scopes containing dimension_omissions, address each planned change screen in
 dimension_coverage (see docs/tool-selection.md). Check opposing group changes even if the net is small.
 
 For broad count screens also supply intersection_review (status, reason, evidence) as documented

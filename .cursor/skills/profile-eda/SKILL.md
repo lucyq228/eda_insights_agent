@@ -33,6 +33,6 @@ incomplete. Also writes the target overview and target-by-segment charts.
 ## How to read it
 
 - Say what each issue means for the analysis, e.g. "12% missing ratings: rating
-  results rest on about 1,800 rows", "8 duplicates: prep drops them".
+  results rest on about 1,800 rows", "8 identical rows: preserved until record keys establish genuine duplicates".
 - A leakage suspect that is still a driver is a hard stop: report it.
 - Do not open the data file or print rows. Work only from the script output.

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib
+import math
 from functools import lru_cache
 
 import yaml
@@ -87,6 +88,24 @@ def grouping_columns(by) -> list[str]:
     return columns
 
 
+def broad_change(scope: dict) -> bool:
+    """Change investigations default to broad; focused exceptions must be explicit."""
+    return bool(change_steps(scope)) and scope.get("change_investigation", "broad") != "focused"
+
+
+def validate_dimension_bins(scope: dict, types: dict) -> list[str]:
+    bins = scope.get("dimension_bins", {})
+    if not isinstance(bins, dict):
+        return ["dimension_bins must map numeric fields to fixed cut points"]
+    errors = []
+    for column, edges in bins.items():
+        if (types.get(column) not in ("numeric", "binary") or not isinstance(edges, list) or not edges
+                or any(isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x) for x in edges)
+                or edges != sorted(set(edges))):
+            errors.append(f"dimension_bins {column}: use a numeric field and increasing finite cut points")
+    return errors
+
+
 def step_columns(tool_id: str, params: dict, scope: dict, profile: dict) -> list[str]:
     spec = get(tool_id).get("params", {})
     used = []
@@ -146,19 +165,28 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
             groups = grouping_columns(by)
         except ValueError as exc:
             return {"verdict": "blocked", "reasons": [str(exc)], "warnings": []}
-        if not count_change and not isinstance(by, str):
-            return {"verdict": "blocked", "reasons": ["rate grouping must be one column"], "warnings": []}
         if not isinstance(cohort, str):
             return {"verdict": "blocked", "reasons": ["cohort must be one column"], "warnings": []}
         if cohort in groups:
             reasons.append("cohort and grouping must be distinct")
+        reasons += validate_dimension_bins(scope, {c: info["type"] for c, info in cols.items()})
+        if not count_change:
+            denominator = params.get("denominator")
+            if target["type"] != "binary" and not denominator:
+                reasons.append("numeric rate target requires a denominator column; target must be event counts")
+            if denominator and target["type"] != "numeric":
+                reasons.append("aggregated rates require a numeric event-count target")
+            if denominator and (denominator in groups or denominator == cohort or denominator == target["column"]):
+                reasons.append("denominator must be distinct from target, cohort and grouping")
+            if denominator in cols and cols[denominator]["type"] not in ("numeric", "binary", "constant"):
+                reasons.append("denominator must contain numeric eligible counts")
         allowed = set(resolved_drivers(scope, profile)) | set(scope.get("segments", []))
         for field in [cohort, *groups]:
             scoped_date = count_change and field == cohort == scope.get("date_column")
             if (field not in allowed and not scoped_date) or field in (scope.get("id_column"), scope.get("entity_column")):
                 reasons.append(f"'{field}' must be a scoped driver or segment, distinct from unit identifiers")
             supported = ("binary", "categorical", "numeric", "datetime") if count_change and field == cohort else ("binary", "categorical")
-            if field in cols and cols[field]["type"] not in supported:
+            if field in cols and cols[field]["type"] not in supported and not (field in groups and field in scope.get("dimension_bins", {})):
                 reasons.append(f"'{field}' has an unsupported period or grouping type")
         labels = [params.get(key) for key in ("baseline", "comparison")]
         if not all(isinstance(label, str) and label.strip() for label in labels) or labels[0] == labels[1]:
@@ -185,9 +213,10 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
             continue
         if c == target["column"]:
             reasons.append(f"'{c}' is the target; it cannot also be a driver")
-        if c in excluded and (change or not tool.get("descriptive")):
+        component = tool_id == "rate-change-decomposition" and c == params.get("denominator")
+        if c in excluded and not component and (change or not tool.get("descriptive")):
             reasons.append(f"'{c}' is excluded in the scope")
-        if c in leakage and (change or not tool.get("descriptive")):
+        if c in leakage and not component and (change or not tool.get("descriptive")):
             reasons.append(f"'{c}' looks like target leakage; add it to exclude or justify it")
         if cols[c]["type"] not in USABLE_TYPES and not tool.get("descriptive"):
             reasons.append(f"'{c}' is type '{cols[c]['type']}', not usable as a driver")

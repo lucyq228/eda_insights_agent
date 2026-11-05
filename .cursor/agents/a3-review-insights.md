@@ -43,3 +43,9 @@ cited joint results, not_needed with a screen-based reason, or unresolved with t
 gap. A marginal screen alone is not a joint result. Check unchanged totals, sparse/zero groups,
 offsets and overlapping partitions. Distinguish composition-share changes, contribution_pp and
 net_change_share. Describe possible mechanisms as hypotheses unless supported by further evidence.
+
+
+Broad coverage is required even if omission metadata was forgotten. Check numeric bands/omissions,
+preparation row and metric reconciliation, and disjoint count or event/eligible grain. Missing
+outcomes are not negatives and missing coverage is not zero. For aggregated rates verify summed
+events/eligible counts and do not interpret unweighted count correlations as rate associations.

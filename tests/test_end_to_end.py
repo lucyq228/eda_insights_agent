@@ -115,7 +115,8 @@ def test_store_sales_full_flow(tmp_path):
     advanced = run("run-insights-project", "advance_run")
     assert [s["stage"] for s in advanced["stages"]] == ["data_quality", "prepared_data", "analyses"]
     prep = run.artifact("prepared_data.json")
-    assert any("8 exact duplicate" in x for x in prep["log"])
+    assert any("preserved 8 identical rows" in x for x in prep["log"])
+    assert prep["reconciliation"]["input_rows"] == prep["reconciliation"]["output_rows"]
     assert not advanced["stages"][-1]["result"]["errors"]
 
     res = {p.stem: json.loads(p.read_text(encoding="utf-8")) for p in (run.dir / "results").glob("*.json")}

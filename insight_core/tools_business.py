@@ -159,15 +159,35 @@ def period_comparison(ctx, params):
             "notes": ["Exact accounting attribution, not causal effects or a forecast of intervention lift."]}
 
 
+def _dimension_frame(ctx, selected, dimensions):
+    """Apply approved fixed bands identically in all cohorts; preserve missing groups."""
+    errors = registry.validate_dimension_bins(ctx.scope, ctx.types)
+    if errors:
+        raise ValueError("; ".join(errors))
+    keys = ["group"] if len(dimensions) == 1 else [f"group_{i+1}" for i in range(len(dimensions))]
+    cells = pd.DataFrame(index=selected.index)
+    for key, column in zip(keys, dimensions):
+        values = selected[column]
+        if column in ctx.scope.get("dimension_bins", {}):
+            edges = [-np.inf, *ctx.scope["dimension_bins"][column], np.inf]
+            values = pd.cut(pd.to_numeric(values, errors="raise"), edges).astype("string")
+        cells[key] = values
+    return cells, keys
+
+
 def rate_change_decomposition(ctx, params):
-    """Standardize the comparison cohort to baseline group rates on the prepared binary target."""
+    """Standardize binary outcomes or event/eligible counts to baseline group rates."""
     cohort, by = params["cohort"], params["by"]
+    dimensions = registry.grouping_columns(by)
+    denominator = params.get("denominator")
+    if cohort in dimensions or (denominator and denominator in [ctx.target, cohort, *dimensions]):
+        raise ValueError("Target, denominator, cohort and grouping roles must be distinct")
     labels = ctx.df[cohort].astype("string")
     flags = []
     if labels.isna().any():
         flags.append(f"{labels.isna().sum()} prepared rows lack a cohort and cannot be assigned.")
     unit_id = ctx.scope.get("id_column")
-    if unit_id:
+    if unit_id and not denominator:
         keys = ctx.df.loc[labels.isin([params["baseline"], params["comparison"]]), unit_id]
         if keys.isna().any() or keys.duplicated().any():
             raise ValueError("The declared unit ID must be present and unique across the selected cohorts")
@@ -177,14 +197,23 @@ def rate_change_decomposition(ctx, params):
         selected = ctx.df.loc[labels.eq(label)]
         if selected.empty:
             raise ValueError(f"No eligible rows in {role} cohort {label!r}")
-        outcomes = selected[ctx.target]
-        if not outcomes.isin([0, 1]).all():
-            raise ValueError("Expected one observed binary outcome per eligible unit")
-        counts = selected.groupby(by, dropna=False, observed=True)[ctx.target].agg(["size", "sum"])
+        outcomes = pd.to_numeric(selected[ctx.target], errors="raise")
+        eligible = pd.to_numeric(selected[denominator], errors="raise") if denominator else pd.Series(1, index=selected.index)
+        if not denominator and not outcomes.isin([0, 1]).all():
+            raise ValueError("Expected one observed binary outcome per eligible unit; resolve missing outcomes first")
+        if not ((np.isfinite(outcomes) & outcomes.ge(0) & outcomes.mod(1).eq(0))
+                & (np.isfinite(eligible) & eligible.ge(0) & eligible.mod(1).eq(0))
+                & outcomes.le(eligible)).all():
+            raise ValueError("Event and eligible counts must be finite nonnegative integers, with events <= eligible")
+        if eligible.sum() <= 0:
+            raise ValueError("Each cohort needs a positive eligible denominator")
+        cells, group_keys = _dimension_frame(ctx, selected, dimensions)
+        cells["events"], cells["eligible"] = outcomes, eligible
+        counts = cells.groupby(group_keys, dropna=False, observed=True)[["eligible", "events"]].sum()
         counts.columns = [f"{role}_n", f"{role}_events"]
         groups.append(counts)
-        cohorts.append({"role": role, "cohort": label, "n": len(selected),
-                        "events": int(outcomes.sum()), "rate": outcomes.mean()})
+        cohorts.append({"role": role, "cohort": label, "n": int(eligible.sum()),
+                        "events": int(outcomes.sum()), "rate": outcomes.sum() / eligible.sum()})
 
     table = pd.concat(groups, axis=1).fillna(0).astype(int)
     base, comp = cohorts
@@ -213,9 +242,10 @@ def rate_change_decomposition(ctx, params):
                          finding("Within-group contribution (pp)", "within_pp", within, n)])
     return {"summary": f"Rate change {delta:+.2f} pp, grouped by {by} using baseline reference rates",
             "findings": findings, "tables": {"cohorts": pd.DataFrame(cohorts),
-            "groups": table.rename_axis("group").reset_index()}, "flags": flags, "charts": [],
+            "groups": table.reset_index()}, "grouping_columns": dict(zip(group_keys, dimensions)), "flags": flags, "charts": [],
             "notes": ["Rates and shares are fractions. Contributions are percentage points.",
-                      "Descriptive attribution uses one eligible prepared row per unit."]}
+                      "Descriptive attribution uses binary unit outcomes or summed event/eligible counts, never averages of rates.",
+                      "Each partition explains the same change; do not add marginal and joint contributions."]}
 
 
 def count_change_contribution(ctx, params):
@@ -247,8 +277,7 @@ def count_change_contribution(ctx, params):
     if unit and (selected[unit].isna().any() or selected.duplicated([period, unit]).any()):
         raise ValueError("Declared row identifiers must be unique within each period")
     # Internal names keep source fields independent of generated result columns.
-    group_keys = ["group"] if len(dimensions) == 1 else [f"group_{i+1}" for i in range(len(dimensions))]
-    cells = pd.DataFrame({key: selected[column] for key, column in zip(group_keys, dimensions)})
+    cells, group_keys = _dimension_frame(ctx, selected, dimensions)
     cells["period"], cells["n"] = labels.loc[selected.index], values
     counts = cells.groupby([*group_keys, "period"], dropna=False, observed=True).n.sum().unstack()
     if not np.isclose(counts.sum().sum(), values.sum(), atol=1e-8, rtol=1e-12):

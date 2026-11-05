@@ -89,21 +89,20 @@ def challenges(run_dir: Path) -> dict:
                                            if s["hypothesis"] == h["id"] and s["step_id"] in waivers]}
     prompts = ["Have the agreed sequential questions been answered, or their conditional triggers and data gaps explained?",
                "Does each claim state its aggregation, denominator, population and observational limits?",
-               "Read aggregate result tables; a null trend is not evidence of no temporal patterns.","Does the pooled result survive within segments? Lead with within-segment when they differ.",
+               "Read aggregate result tables; a null trend is not evidence of no temporal patterns.","Do pooled and within-segment results answer different questions? Lead with the comparison agreed in scope.",
                "Is a weak correlation hiding a curve (nonlinearity flags)?",
                "Do overlapping drivers tell one story or two (collinear pairs)?",
                "Is anything that looks too good actually leakage or a derived column?",
                "Which findings fail FDR, and are any insights resting only on those?"]
     if ent:
-        prompts.insert(0, f"Panel data ({ent}): lead with within-{ent} estimates (the same {ent} over time), report "
-                          f"between-{ent} separately (n = entities), and do not headline a pooled estimate the panel "
-                          "tools contradict (PANEL SPLIT flags).")
+        prompts.insert(0, f"Panel data ({ent}): distinguish within-{ent}, between-{ent} and pooled estimates; "
+                          "lead with the scoped comparison and explain PANEL SPLIT flags.")
     checks = {"results": per_result, "hypotheses": by_h, "prompts": prompts}
-    if "dimension_omissions" in scope:
+    if registry.broad_change(scope) or "dimension_omissions" in scope:
         checks["dimension_screens"] = {s["step_id"]: s["params"]["by"] for s in registry.change_steps(scope)}
-        checks["dimension_omissions"] = scope["dimension_omissions"]
+        checks["dimension_omissions"] = scope.get("dimension_omissions", {})
         prompts.append("Inspect group-level offsets, verify omitted or equivalent fields, and complete dimension_coverage.")
-    if "dimension_omissions" in scope and any(
+    if (registry.broad_change(scope) or "dimension_omissions" in scope) and any(
             s["tool"] == "count-change-contribution" for s in registry.change_steps(scope)):
         prompts.append("Complete intersection_review: cite selected combined-dimension results or explain why none were needed/feasible. Check contributions and offsets against the original total.")
     return checks
@@ -129,7 +128,7 @@ def _causal(text: str, where: str) -> list[str]:
 
 def _intersection_errors(draft: dict, scope: dict, results: dict) -> list[str]:
     screens = [s for s in registry.change_steps(scope) if s["tool"] == "count-change-contribution"]
-    if "dimension_omissions" not in scope or not screens:
+    if not (registry.broad_change(scope) or "dimension_omissions" in scope) or not screens:
         return []
     item = draft.get("intersection_review")
     if (not isinstance(item, dict) or item.get("status") not in ("completed", "not_needed", "unresolved")
@@ -152,7 +151,7 @@ def _intersection_errors(draft: dict, scope: dict, results: dict) -> list[str]:
             continue
         if result.get("tool") != "count-change-contribution" or result.get("error") or len(groups) < 2:
             continue
-        if any(params.get(k) != reference.get(k) for k in ("cohort", "baseline", "comparison", "history")):
+        if any(params.get(k) != reference.get(k) for k in ("cohort", "baseline", "comparison", "history", "absent_is_zero")):
             errs.append("intersection_review: joint result must use the screen's periods and baseline")
             continue
         metrics = {f["metric"]: f.get("estimate") for f in result.get("findings", [])}
@@ -173,7 +172,7 @@ def validate_review(draft: dict, run_dir: Path) -> list[str]:
     scope = read_artifact(run_dir, "approved_scope.json")
     results = load_results(run_dir)
     errs = []
-    if "dimension_omissions" in scope:
+    if registry.broad_change(scope) or "dimension_omissions" in scope:
         coverage = draft.get("dimension_coverage")
         steps = registry.change_steps(scope)
         if not isinstance(coverage, dict) or set(coverage) != {s["step_id"] for s in steps}:

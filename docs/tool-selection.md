@@ -58,8 +58,14 @@ First compare events and eligible units in each cohort. For one observed binary 
 eligible row, use `rate-change-decomposition` when group composition could explain the change.
 For example, use `{"cohort":"launch_wave","baseline":"A","comparison":"B","by":"entry_channel"}`.
 Declare cohort and grouping as drivers or segments with timing verified before the outcome.
-Confirm unique units and comparable observation windows separately. Aggregate inputs containing
-rates or exposure counts require a different denominator treatment.
+Confirm unique units and comparable observation windows separately. For aggregated data, set the
+numeric target to event counts and pass `denominator: "eligible_count"`. The tool sums counts
+before dividing; never average supplied rates. Require disjoint source cells and events <= eligible.
+Use `by: ["channel", "tenure"]` for a selected joint rate partition. New comparison groups without
+a baseline rate remain unresolved. Aggregated-rate inputs do not make other tools denominator-aware:
+use unit-level data or explicitly suitable methods for subsequent rate associations.
+Change tools use the approved base grain. Resolve unique-customer counting and disjoint assignments
+upstream; transaction counts cannot stand in for unique customers. Views are still unsupported.
 
 The benchmark applies baseline group rates to comparison counts. Benchmark minus baseline is
 mix; comparison minus benchmark is within-group change. Both contributions use percentage points.
@@ -69,13 +75,15 @@ from overlapping groupings double counts the same change.
 
 ## Screening dimensions for changes in counts and rates
 
-For a broad change investigation include `dimension_omissions` in the scope (an empty object
+Change investigations default to `change_investigation: "broad"`. Include `dimension_omissions`
+in the scope (an empty object
 when every eligible dimension is screened). Plan one initial step per distinct eligible dimension,
 with a common metric, baseline and comparison. Use the full profile to identify meaningful grouping
-fields. The scope validator checks categorical and binary columns except identifiers, target and
+fields. The scope validator checks numeric, categorical and binary columns except identifiers, target, denominator and
 period roles. Record omitted fields as column-to-reason pairs, including timing, inadequate coverage
 or duplicate labels (name the representative and verify the one-to-one mapping). For specific
-single-group questions the usual focused scope is sufficient.
+single-group questions set `change_investigation: "focused"` and a `focus_reason` tied to the request.
+Omitting coverage metadata cannot silently disable broad checks.
 
 Use `count-change-contribution` for a numeric additive count or a prepared binary indicator whose
 sum counts events. For individual units use a unique ID per period; for pre-aggregated counts confirm
@@ -104,7 +112,11 @@ After a broad count screen, include an adaptive question in the scope and use th
 selected pairs: `{"cohort":"period","baseline":"3","comparison":"4","by":["channel","tenure"]}`.
 Single-column calls remain valid. Every grouping field must be a scoped, eligible pre-outcome
 dimension; exclusions and leakage checks apply to every component. Joint groups do not substitute
-for the initial one-dimension coverage. Numeric dimensions need justified bins prepared upstream.
+for the initial one-dimension coverage. For numeric dimensions declare fixed cut points in scope,
+e.g. `"dimension_bins": {"tenure_months": [6, 12, 24]}`. Both change tools use the same right-closed
+bands in every cohort: <=6, (6,12], (12,24], >24. Original values remain available for other tools.
+Explain the business rationale in assumptions; never choose cuts to maximize the observed change.
+Every numeric candidate must be screened with approved bands or have an omission reason.
 
 Choose a few combinations using starting size, absolute contribution, percentage change, opposing
 movements and business plausibility, not only the largest percent drop. A marginally flat field
@@ -136,3 +148,14 @@ and explains missing data, insufficient cells or exhausted budget. For example, 
 dimension can justify not_needed; inability to examine a promising pair is unresolved.
 The reviewer checks the reason and evidence, requests targeted follow-ups when needed, and
 reports the disposition alongside dimension coverage. Possible causes remain hypotheses.
+
+
+## Preparation and shared-tool handoff
+
+Preparation preserves identical rows, missing targets, original columns and categories. Identical
+values can be legitimate events. Deduplicate upstream only after verifying the record key and
+business grain; start a new run for changed input data. Inspect preparation reconciliation before
+analysis. Missing count/outcome components block change attribution rather than silently shrinking
+the population; resolve eligibility explicitly. Other tools must state their usable sample.
+All three scenarios share the tool shelf. Choose tools for a remaining question and valid inputs;
+do not require every tool to run, treat accounting as causality, or force a within-group headline.

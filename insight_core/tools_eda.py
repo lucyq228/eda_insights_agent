@@ -7,7 +7,7 @@ import re
 import numpy as np
 import pandas as pd
 
-from . import charts, data, stats
+from . import charts, data, stats, registry
 from .context import Ctx
 
 
@@ -105,7 +105,7 @@ def data_quality_check(ctx: Ctx, params: dict, precomputed_leakage: list[dict] |
         checks.append({"check": name, "status": status, "detail": detail})
 
     dup = int(df.duplicated().sum())
-    add("duplicate rows", "warn" if dup else "pass", f"{dup} exact duplicates (prep will drop them)")
+    add("duplicate rows", "warn" if dup else "pass", f"{dup} identical rows (preserved; confirm record keys before deduplication)")
     key_col = scope.get("entity_column") or scope.get("id_column")
     if key_col and scope.get("date_column"):
         key_dup = int(df.duplicated([key_col, scope["date_column"]]).sum())
@@ -188,13 +188,12 @@ def prepare_dataset(ctx: Ctx, params: dict) -> dict:
     df, scope = ctx.df.copy(), ctx.scope
     rare_share = float(params.get("rare_level_share", .01))
     log = []
-    n0 = len(df)
-    df = df.drop_duplicates()
-    log.append(f"dropped {n0 - len(df)} exact duplicate rows")
+    # Identical values are not proof of duplicate events. Preserve the base grain.
+    duplicates = int(df.duplicated().sum())
+    log.append(f"preserved {duplicates} identical rows; deduplicate upstream only with verified record keys")
     df[ctx.target] = target_series(df, scope)
-    before = len(df)
-    df = df[df[ctx.target].notna()]
-    log.append(f"dropped {before - len(df)} rows without a target")
+    missing = int(df[ctx.target].isna().sum())
+    log.append(f"preserved {missing} missing targets; each analysis must state its eligible population")
     if ctx.target_type == "binary":
         log.append(f"target coded 1 = '{scope['target']['positive_class']}', 0 = other")
     # Preserve the clean base. Model exclusions are not data deletion rules.
@@ -206,9 +205,31 @@ def prepare_dataset(ctx: Ctx, params: dict) -> dict:
     log.append("preserved all columns and original categories; model exclusions apply only to predictors")
     if rare_share != .01:
         log.append("rare_level_share ignored: category pooling belongs in an explicit model view")
+    reconciliation = []
+    seen_components = set()
+    for step in registry.change_steps(scope):
+        params = step["params"]
+        period = params["cohort"]
+        components = list(dict.fromkeys([ctx.target] + ([params["denominator"]] if params.get("denominator") else [])))
+        key = (period, tuple(components))
+        if key in seen_components:
+            continue
+        seen_components.add(key)
+        for label, group in df.groupby(period, dropna=False, observed=True):
+            row = {"period_column": period, "period": str(label), "rows": len(group), "components": {}}
+            for column in components:
+                values = pd.to_numeric(group[column], errors="coerce")
+                total = values.sum(min_count=1)
+                row["components"][column] = {"sum": None if pd.isna(total) else float(total),
+                                             "missing": int(values.isna().sum())}
+            if row not in reconciliation:
+                reconciliation.append(row)
     path = ctx.run_dir / "datasets" / "prepared.parquet"
     df.to_parquet(path, index=False)
     return {"summary": f"{len(df)} rows x {df.shape[1]} columns ready", "n_rows": int(len(df)), "columns": types,
             "date_column": date, "id_column": scope.get("id_column"), "entity_column": scope.get("entity_column"),
             "log": log, "path": str(path),
+            "reconciliation": {"input_rows": len(ctx.df), "output_rows": len(df),
+                               "identical_rows_preserved": duplicates, "missing_targets": missing,
+                               "period_totals": reconciliation},
             "findings": [], "charts": []}

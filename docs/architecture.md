@@ -35,7 +35,7 @@ A new objective or dataset requires a new run. Do not redefine the scope to chas
 
 ## Data and metrics
 
-Preparation preserves all columns and categories after exact deduplication, target validity and date
+Preparation preserves rows (including identical rows and missing targets), columns and categories during target coding and date
 parsing. Predictive exclusions do not delete accounting components. Roles may name customer,
 transaction (a composite key list), quantity, product and store. Distinct customer/transaction counts
 are nonadditive across product groups. Metrics use complete required keys/components and report

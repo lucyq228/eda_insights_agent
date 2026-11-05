@@ -30,8 +30,11 @@ The target overview runs automatically in the post-confirmation data-quality sta
 eda-overview, profiling, preparation, multiple-testing-adjustment or reporting tools into an analysis pathway.
 Initial pathways and candidate_tools must name selectable analysis tools from read_context.py.
 
-For broad KPI count/rate change requests, include dimension_omissions and initial screens per
+For KPI count/rate change requests, default to broad with dimension_omissions and initial screens per
 docs/tool-selection.md. Explain each exclusion and the shared baseline in the proposed scope.
 
 Broad count scopes also include an adaptive intersection question with count-change-contribution
 as a candidate tool. Select pairs after screening, within the existing follow-up budget.
+
+
+Use dimension_bins for justified numeric bands. Focused exceptions need change_investigation: focused and focus_reason. See docs/tool-selection.md for aggregated rate inputs and preserved-row preparation.

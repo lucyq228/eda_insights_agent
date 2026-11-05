@@ -65,7 +65,7 @@ def supporting_tools(insight: dict, results: dict) -> list[str]:
 
 
 def dimension_rows(scope, review):
-    if "dimension_omissions" not in scope:
+    if not registry.broad_change(scope) and "dimension_omissions" not in scope:
         return []
     rows = []
     for step in registry.change_steps(scope):
@@ -75,7 +75,7 @@ def dimension_rows(scope, review):
         name = " × ".join(by) if isinstance(by, list) else by
         rows.append((name, entry.get("status", "unresolved"),
                      entry.get("reason", ""), label))
-    rows.extend((name, "omitted", reason, "") for name, reason in scope["dimension_omissions"].items())
+    rows.extend((name, "omitted", reason, "") for name, reason in scope.get("dimension_omissions", {}).items())
     if review.get("intersection_review"):
         item = review["intersection_review"]
         refs = ", ".join(ev["result"] for ev in item.get("evidence", []))

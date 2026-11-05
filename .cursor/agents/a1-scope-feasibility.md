@@ -36,7 +36,8 @@ Do not execute substantive analysis. Return the proposal version and a clear awa
 
 Select canonical tools using the registry use_when/reuse guidance and docs/tool-selection.md. Numeric profiles use target-by-numeric-bins; categorical comparisons use target-by-group. Do not schedule equivalent tests as separate evidence. Match pooled, adjusted, within and between questions to the intended decision.
 
-For broad count or rate change investigations, use dimension_omissions per docs/tool-selection.md.
+Change investigations default to broad and require dimension_omissions per docs/tool-selection.md.
+For a deliberately focused request, set change_investigation: focused and explain focus_reason.
 Agree on the metric, comparable periods, baseline, and meaningful movement before screening.
 Inventory all eligible business dimensions. Screen each distinct pre-outcome dimension in the
 initial pathway; explain duplicates, exclusions and unavailable comparisons in the proposal.
@@ -47,3 +48,10 @@ For broad count changes, include an adaptive question to examine selected dimens
 after the screen (empty pathway, followup_when, candidate_tools: count-change-contribution).
 Keep all eligible grouping fields in scope. Plan broad coverage first, not every possible cross.
 Use exploratory mode for evidence-selected follow-ups; do not preselect a winning group.
+
+
+Inventory numeric dimensions too: declare justified fixed dimension_bins or explain omission.
+For aggregated event rates scope a numeric event-count target and denominator parameter; for
+binary unit outcomes confirm eligibility and maturity. For counts verify additivity, including
+unique-customer assignments before analysis. Preserve legitimate repeated events; never assume
+identical rows are duplicates. Resolve unsupported grain/input requirements during scoping.

@@ -103,6 +103,13 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
     for q in scope.get("user_questions", []):
         if not q.get("question") or not q.get("why_it_matters"):
             errors.append(f"question {q.get('id')}: needs 'question' and 'why_it_matters'")
+    errors += registry.validate_dimension_bins(scope, {c: info["type"] for c, info in cols.items()})
+    if scope.get("change_investigation", "broad") not in ("broad", "focused"):
+        errors.append("change_investigation must be broad or focused")
+    if registry.change_steps(scope) and scope.get("change_investigation") == "focused" and not str(scope.get("focus_reason", "")).strip():
+        errors.append("focused change investigations need focus_reason tied to the requested question")
+    if registry.broad_change(scope) and "dimension_omissions" not in scope:
+        errors.append("broad change investigations require dimension_omissions (empty if all dimensions are screened)")
     if "dimension_omissions" in scope and not errors:
         omitted = scope["dimension_omissions"]
         steps = registry.change_steps(scope)
@@ -113,7 +120,7 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
             errors.append("dimension coverage requires an initial count or rate change screen")
         else:
             first = steps[0]
-            benchmark_keys = ("cohort", "baseline", "comparison", "history")
+            benchmark_keys = ("cohort", "baseline", "comparison", "history", "denominator", "absent_is_zero")
             for step in steps[1:]:
                 if step["tool"] != first["tool"] or any(step["params"].get(k) != first["params"].get(k) for k in benchmark_keys):
                     errors.append("dimension screens must compare the same KPI, periods and baseline method")
@@ -130,7 +137,11 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
                     screened.add(groups[0])
             roles = {tc, scope.get("id_column"), scope.get("entity_column"), scope.get("date_column")}
             roles.update(step["params"].get("cohort") for step in steps)
-            candidates = {c for c, info in cols.items() if info["type"] in ("binary", "categorical")} - roles
+            roles.update(step["params"].get("denominator") for step in steps)
+            candidates = {c for c, info in cols.items() if info["type"] in ("numeric", "binary", "categorical")} - roles
+            unbanded = {c for c in screened if c in cols and cols[c]["type"] == "numeric" and c not in scope.get("dimension_bins", {})}
+            if unbanded:
+                errors.append(f"numeric screens need dimension_bins or an omission reason: {sorted(unbanded)}")
             missing = candidates - screened - omitted.keys()
             if missing:
                 errors.append(f"screen or explain omitted dimensions: {sorted(missing)}")
