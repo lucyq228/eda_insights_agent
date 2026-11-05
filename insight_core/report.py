@@ -71,9 +71,15 @@ def dimension_rows(scope, review):
     for step in registry.change_steps(scope):
         label = step["step_id"]
         entry = review.get("dimension_coverage", {}).get(label, {})
-        rows.append((step["params"]["by"], entry.get("status", "unresolved"),
+        by = step["params"]["by"]
+        name = " × ".join(by) if isinstance(by, list) else by
+        rows.append((name, entry.get("status", "unresolved"),
                      entry.get("reason", ""), label))
     rows.extend((name, "omitted", reason, "") for name, reason in scope["dimension_omissions"].items())
+    if review.get("intersection_review"):
+        item = review["intersection_review"]
+        refs = ", ".join(ev["result"] for ev in item.get("evidence", []))
+        rows.append(("Combined dimensions", item["status"], item["reason"], refs))
     return rows
 
 

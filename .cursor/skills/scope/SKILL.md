@@ -32,3 +32,6 @@ Initial pathways and candidate_tools must name selectable analysis tools from re
 
 For broad KPI count/rate change requests, include dimension_omissions and initial screens per
 docs/tool-selection.md. Explain each exclusion and the shared baseline in the proposed scope.
+
+Broad count scopes also include an adaptive intersection question with count-change-contribution
+as a candidate tool. Select pairs after screening, within the existing follow-up budget.

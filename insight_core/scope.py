@@ -118,7 +118,16 @@ def validate(scope: dict, profile: dict) -> tuple[list[str], list[str]]:
                 if step["tool"] != first["tool"] or any(step["params"].get(k) != first["params"].get(k) for k in benchmark_keys):
                     errors.append("dimension screens must compare the same KPI, periods and baseline method")
                     break
-            screened = {step["params"].get("by") for step in steps}
+            # A joint partition does not replace the broad one-dimension screen.
+            screened = set()
+            for step in steps:
+                try:
+                    groups = registry.grouping_columns(step["params"].get("by"))
+                except ValueError as exc:
+                    errors.append(str(exc))
+                    continue
+                if len(groups) == 1:
+                    screened.add(groups[0])
             roles = {tc, scope.get("id_column"), scope.get("entity_column"), scope.get("date_column")}
             roles.update(step["params"].get("cohort") for step in steps)
             candidates = {c for c, info in cols.items() if info["type"] in ("binary", "categorical")} - roles

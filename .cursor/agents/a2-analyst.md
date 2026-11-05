@@ -38,3 +38,13 @@ groupings separate. Keep held-out answers and outcome-derived fields out of tool
 For dimension screens, verify row grain, completeness, and the baseline before execution. Inspect
 losses and offsets by group even when the net is small. Choose up to three initial deep dives using
 size, opposing movements and a plausible explanation. Use other shelf tools for distinct questions.
+
+For count changes, follow the screen with selected intersections using the same tool and
+by: ["dimension_a", "dimension_b"]. Start with a few meaningful pairs, within the agreed budget.
+Use absolute contribution, starting size, percent change, offsets and business plausibility;
+a tiny group with a large percentage decline is not automatically the priority. Marginally flat
+dimensions can still hide opposing subgroup shifts; consider plausible pairs when warranted.
+Keep the metric, population, periods and baseline fixed. Preserve zero/missing-cell safeguards.
+Inspect group counts, shares and contribution_pp; do not add marginal and joint attributions.
+Pass the joint findings to review, or explain why further drilling was unnecessary or infeasible.
+Continue to use other shelf tools when they answer a distinct remaining question.

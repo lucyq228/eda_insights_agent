@@ -37,3 +37,9 @@ For broad count/rate change investigations, provide dimension_coverage as specif
 docs/tool-selection.md. Check that one-to-one labels really represent the same groups, verify
 positive and negative contributions separately, and describe unresolved coverage before concluding
 there is little movement. Compare each dimension's attribution to the same total.
+
+For broad count screens, require intersection_review per docs/tool-selection.md: completed with
+cited joint results, not_needed with a screen-based reason, or unresolved with the coverage/budget
+gap. A marginal screen alone is not a joint result. Check unchanged totals, sparse/zero groups,
+offsets and overlapping partitions. Distinguish composition-share changes, contribution_pp and
+net_change_share. Describe possible mechanisms as hypotheses unless supported by further evidence.

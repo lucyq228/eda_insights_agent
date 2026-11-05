@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import math
 import re
 from pathlib import Path
 
@@ -102,6 +103,9 @@ def challenges(run_dir: Path) -> dict:
         checks["dimension_screens"] = {s["step_id"]: s["params"]["by"] for s in registry.change_steps(scope)}
         checks["dimension_omissions"] = scope["dimension_omissions"]
         prompts.append("Inspect group-level offsets, verify omitted or equivalent fields, and complete dimension_coverage.")
+    if "dimension_omissions" in scope and any(
+            s["tool"] == "count-change-contribution" for s in registry.change_steps(scope)):
+        prompts.append("Complete intersection_review: cite selected combined-dimension results or explain why none were needed/feasible. Check contributions and offsets against the original total.")
     return checks
 
 
@@ -121,6 +125,48 @@ def _check_evidence(evidence: list, results: dict, where: str) -> list[str]:
 def _causal(text: str, where: str) -> list[str]:
     m = CAUSAL.search(text or "")
     return [f"{where}: causal wording '{m.group(0)}'; describe an association instead"] if m else []
+
+
+def _intersection_errors(draft: dict, scope: dict, results: dict) -> list[str]:
+    screens = [s for s in registry.change_steps(scope) if s["tool"] == "count-change-contribution"]
+    if "dimension_omissions" not in scope or not screens:
+        return []
+    item = draft.get("intersection_review")
+    if (not isinstance(item, dict) or item.get("status") not in ("completed", "not_needed", "unresolved")
+            or not isinstance(item.get("reason"), str) or not item["reason"].strip()):
+        return ["intersection_review needs status (completed, not_needed, unresolved) and a reason"]
+    evidence = item.get("evidence", [])
+    errs = _check_evidence(evidence, results, "intersection_review")
+    if item["status"] != "completed":
+        return errs
+    # A claim of completion must cite an actual joint count attribution under the
+    # same comparison, not merely two separate marginal screens.
+    reference = screens[0]["params"]
+    matched = []
+    for ev in evidence:
+        result = results.get(ev.get("result"), {})
+        params = result.get("params", {})
+        try:
+            groups = registry.grouping_columns(params.get("by"))
+        except ValueError:
+            continue
+        if result.get("tool") != "count-change-contribution" or result.get("error") or len(groups) < 2:
+            continue
+        if any(params.get(k) != reference.get(k) for k in ("cohort", "baseline", "comparison", "history")):
+            errs.append("intersection_review: joint result must use the screen's periods and baseline")
+            continue
+        metrics = {f["metric"]: f.get("estimate") for f in result.get("findings", [])}
+        base = {f["metric"]: f.get("estimate")
+                for f in results.get(screens[0]["step_id"], {}).get("findings", [])}
+        totals = ("expected_count", "observed_count", "net_change")
+        if any(not isinstance(metrics.get(k), (int, float)) or not isinstance(base.get(k), (int, float))
+               or not math.isclose(metrics[k], base[k], rel_tol=1e-12, abs_tol=1e-8) for k in totals):
+            errs.append("intersection_review: joint counts must reconcile to the screen's totals")
+            continue
+        matched.append(result)
+    if not matched:
+        errs.append("intersection_review: completed requires a successful combined-dimension count result")
+    return errs
 
 
 def validate_review(draft: dict, run_dir: Path) -> list[str]:
@@ -145,6 +191,7 @@ def validate_review(draft: dict, run_dir: Path) -> list[str]:
                 required = "mix_pp" if step["tool"] == "rate-change-decomposition" else "net_change"
                 if required not in {f["metric"] for f in result.get("findings", [])} and row["status"] != "unresolved":
                     errs.append(f"{label}: missing attribution evidence requires unresolved status")
+    errs += _intersection_errors(draft, scope, results)
     ids = {h["id"] for h in scope["hypotheses"]}
     waiver_artifact = read_artifact(run_dir, "step_waivers.json") or {}
     waivers = ({w["step_id"] for w in waiver_artifact.get("waivers", [])}

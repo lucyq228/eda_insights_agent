@@ -97,3 +97,42 @@ For each planned screen the review supplies a `dimension_coverage` entry keyed b
 `{"H1.S1":{"status":"movement","reason":"Group losses of 12 offset gains of 12."}}`.
 Use movement, little movement, or unresolved against the agreed business threshold. Cite group
 magnitudes, uncertainty and data gaps. The report combines these entries with scoped omissions.
+
+### Selected count intersections
+
+After a broad count screen, include an adaptive question in the scope and use the same tool for
+selected pairs: `{"cohort":"period","baseline":"3","comparison":"4","by":["channel","tenure"]}`.
+Single-column calls remain valid. Every grouping field must be a scoped, eligible pre-outcome
+dimension; exclusions and leakage checks apply to every component. Joint groups do not substitute
+for the initial one-dimension coverage. Numeric dimensions need justified bins prepared upstream.
+
+Choose a few combinations using starting size, absolute contribution, percentage change, opposing
+movements and business plausibility, not only the largest percent drop. A marginally flat field
+can hide a joint pattern. Do not enumerate all combinations or keep searching for significance.
+Routine scoped follow-ups use the existing reason, question ID and budget. Further dimensions
+are allowed when supported, but small cells and missing coverage may make them uninformative.
+Keep the same population, metric, periods and baseline. Multiple dimension partitions overlap:
+never add their contributions together. Distinct users must belong to disjoint cells per period.
+
+The count table preserves expected, observed and contribution and adds:
+- expected_share / observed_share: group count divided by its respective total (fractions).
+- share_change_pp: 100 × (observed_share − expected_share), a composition change.
+- group_change_pct: 100 × (observed − expected) / expected.
+- contribution_pp: 100 × (observed − expected) / total expected.
+- net_change_share: group contribution / signed net change (fraction).
+With the prior-period baseline, expected is the starting count. With history, expected is the
+projection, so shares and percentage changes describe that benchmark, not observed prior shares.
+Zero denominators are undefined, not zero. Offsetting gains can produce negative shares or shares
+above 100%; label this signed net-change share, not share of gross losses. Keep tiny groups in the
+reconciliation. Joint output columns group_1, group_2, etc. map to source fields in grouping_columns;
+single-column output keeps group. Per-group findings can be cited in insights.
+
+For broad count investigations, review.json also requires:
+`"intersection_review": {"status":"completed","reason":"Selected pair locates overlapping losses.","evidence":[{"result":"H2.F1"}]}`
+Use an actual saved result label. completed must cite a successful multi-column count result with
+the same periods/baseline and totals as the screen. not_needed must cite screening evidence and
+explain why no joint analysis would add useful information. unresolved cites available evidence
+and explains missing data, insufficient cells or exhausted budget. For example, no second eligible
+dimension can justify not_needed; inability to examine a promising pair is unresolved.
+The reviewer checks the reason and evidence, requests targeted follow-ups when needed, and
+reports the disposition alongside dimension coverage. Possible causes remain hypotheses.

@@ -446,6 +446,6 @@ tools:
       cohort: {type: column, required: true, description: Period label or scoped date}
       baseline: {type: str, required: true, description: Prior comparable period label}
       comparison: {type: str, required: true, description: Comparison period label}
-      by: {type: column, required: true, description: Pre-outcome business dimension}
+      by: {type: column_or_columns, required: true, description: One pre-outcome dimension or a list of dimensions for a selected intersection}
       history: {type: list, description: Optional ordered consecutive equally spaced pre-period labels ending at baseline. Comparison must immediately follow.}
       absent_is_zero: {type: bool, description: True only when the source guarantees an absent group in an observed period means zero count.}

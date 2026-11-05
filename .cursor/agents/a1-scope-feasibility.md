@@ -42,3 +42,8 @@ Inventory all eligible business dimensions. Screen each distinct pre-outcome dim
 initial pathway; explain duplicates, exclusions and unavailable comparisons in the proposal.
 Use count-change-contribution for disjoint counts and rate-change-decomposition for event rates.
 Reserve the up-to-three guideline for initial deep dives after screening. Keep answer keys for review.
+
+For broad count changes, include an adaptive question to examine selected dimension intersections
+after the screen (empty pathway, followup_when, candidate_tools: count-change-contribution).
+Keep all eligible grouping fields in scope. Plan broad coverage first, not every possible cross.
+Use exploratory mode for evidence-selected follow-ups; do not preselect a winning group.

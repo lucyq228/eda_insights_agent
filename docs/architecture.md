@@ -78,3 +78,14 @@ category display invariance, p-value precision, and suppression of unidentified 
 The QVI example plan is a manual integration benchmark; keep source data and artifacts out of git.
 
 Tool selection and compatibility: see `docs/tool-selection.md`; the registry exposes canonical names and reuse guidance.
+
+## Count changes: broad screening and selected intersections
+
+The scoping agent inventories individual dimensions and reserves an adaptive intersection question.
+The analyst screens all eligible dimensions, then selects a few plausible combinations within the
+existing follow-up budget. count-change-contribution accepts one column or a list in by, so the
+same calculation serves both levels without a new agent or a new analysis pipeline.
+The reviewer records intersection_review with completed, not_needed or unresolved status, a reason
+and evidence. Completed needs a joint result using the same comparison and reconciling to screen
+totals. The report shows this disposition, including justified skips. Other shelf tools remain
+available for distinct questions. See docs/tool-selection.md for parameters and metric definitions.

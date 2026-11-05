@@ -23,3 +23,6 @@ repeated entities, rank deficiency, and overbroad null conclusions. Report unans
 
 When the approved scope contains dimension_omissions, address each planned change screen in
 dimension_coverage (see docs/tool-selection.md). Check opposing group changes even if the net is small.
+
+For broad count screens also supply intersection_review (status, reason, evidence) as documented
+in docs/tool-selection.md. The final report includes this disposition beside dimension coverage.

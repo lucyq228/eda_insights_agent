@@ -77,12 +77,24 @@ def resolved_drivers(scope: dict, profile: dict) -> list[str]:
     return [c for c in scope["drivers"] if c not in skip]
 
 
+def grouping_columns(by) -> list[str]:
+    """Normalize a count grouping without joining labels or accepting duplicate fields."""
+    columns = [by] if isinstance(by, str) else by
+    if (not isinstance(columns, list) or not columns
+            or any(not isinstance(c, str) or not c.strip() for c in columns)
+            or len(set(columns)) != len(columns)):
+        raise ValueError("by must be a column name or a nonempty list of distinct column names")
+    return columns
+
+
 def step_columns(tool_id: str, params: dict, scope: dict, profile: dict) -> list[str]:
     spec = get(tool_id).get("params", {})
     used = []
     for name, value in params.items():
         kind = spec.get(name, {}).get("type")
-        if kind == "column" and value:
+        if kind == "column_or_columns":
+            used.extend(grouping_columns(value))
+        elif kind == "column" and value:
             used.append(value)
         elif kind == "columns" and isinstance(value, list):
             used.extend(value)
@@ -130,10 +142,18 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
 
     if change:
         cohort, by = params.get("cohort"), params.get("by")
-        if cohort == by:
+        try:
+            groups = grouping_columns(by)
+        except ValueError as exc:
+            return {"verdict": "blocked", "reasons": [str(exc)], "warnings": []}
+        if not count_change and not isinstance(by, str):
+            return {"verdict": "blocked", "reasons": ["rate grouping must be one column"], "warnings": []}
+        if not isinstance(cohort, str):
+            return {"verdict": "blocked", "reasons": ["cohort must be one column"], "warnings": []}
+        if cohort in groups:
             reasons.append("cohort and grouping must be distinct")
         allowed = set(resolved_drivers(scope, profile)) | set(scope.get("segments", []))
-        for field in (cohort, by):
+        for field in [cohort, *groups]:
             scoped_date = count_change and field == cohort == scope.get("date_column")
             if (field not in allowed and not scoped_date) or field in (scope.get("id_column"), scope.get("entity_column")):
                 reasons.append(f"'{field}' must be a scoped driver or segment, distinct from unit identifiers")
@@ -209,7 +229,7 @@ def check_step(tool_id: str, params: dict, scope: dict, profile: dict, leakage: 
     by = params.get("by")
     if "categorical_by" in tool.get("needs", []) and by in cols and cols[by]["type"] not in ("categorical", "binary"):
         reasons.append("target-by-group requires categorical groups; use target-by-numeric-bins for numeric features")
-    if by and by in cols and not change:
+    if not change and by and by in cols:
         shown_levels = cols[by].get("levels", [])
         levels = [lv for lv in shown_levels if lv["count"] >= min_n]
         if "levels" not in cols[by]:

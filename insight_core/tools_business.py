@@ -4,7 +4,7 @@ from __future__ import annotations
 import numpy as np
 import pandas as pd
 
-from . import charts
+from . import charts, registry
 
 
 def finding(label, metric, value, n, **details):
@@ -221,6 +221,9 @@ def rate_change_decomposition(ctx, params):
 def count_change_contribution(ctx, params):
     """Sum disjoint counts and compare each group with the same historical baseline."""
     by, period = params["by"], params["cohort"]
+    dimensions = registry.grouping_columns(by)
+    if period in dimensions:
+        raise ValueError("cohort and grouping must be distinct")
     history = params.get("history", [params["baseline"]])
     periods = [*history, params["comparison"]]
     labels = ctx.df[period].astype("string")
@@ -244,8 +247,12 @@ def count_change_contribution(ctx, params):
     if unit and (selected[unit].isna().any() or selected.duplicated([period, unit]).any()):
         raise ValueError("Declared row identifiers must be unique within each period")
     # Internal names keep source fields independent of generated result columns.
-    cells = pd.DataFrame({"group": selected[by], "period": labels.loc[selected.index], "n": values})
-    counts = cells.groupby(["group", "period"], dropna=False, observed=True).n.sum().unstack()
+    group_keys = ["group"] if len(dimensions) == 1 else [f"group_{i+1}" for i in range(len(dimensions))]
+    cells = pd.DataFrame({key: selected[column] for key, column in zip(group_keys, dimensions)})
+    cells["period"], cells["n"] = labels.loc[selected.index], values
+    counts = cells.groupby([*group_keys, "period"], dropna=False, observed=True).n.sum().unstack()
+    if not np.isclose(counts.sum().sum(), values.sum(), atol=1e-8, rtol=1e-12):
+        raise ValueError("Grouping dropped counts; check missing grouping labels")
     if not set(periods).issubset(counts.columns):
         raise ValueError("At least one requested period has no observations")
     counts = counts[periods]
@@ -270,8 +277,37 @@ def count_change_contribution(ctx, params):
         raise ValueError("Group contributions do not reconcile to total count change")
     metrics = [("Expected count", "expected_count", expected.sum()), ("Observed count", "observed_count", actual.sum()),
                ("Losses", "losses", loss), ("Gains", "gains", gain), ("Net change", "net_change", delta)]
-    groups = pd.DataFrame({"expected": expected, "observed": actual, "contribution": gaps}).reset_index()
-    return {"summary": f"{by}: losses {loss:+g}, gains {gain:+g}, net {delta:+g}",
-            "findings": [finding(label, metric, value, len(selected)) for label, metric, value in metrics],
-            "tables": {"groups": groups}, "flags": [], "charts": [],
-            "notes": ["Each dimension explains the same total. Contributions are descriptive counts."]}
+    groups = pd.DataFrame({"expected": expected, "observed": actual, "contribution": gaps})
+    expected_total, observed_total = expected.sum(), actual.sum()
+    groups["expected_share"] = expected / expected_total if expected_total > 0 else np.nan
+    groups["observed_share"] = actual / observed_total if observed_total > 0 else np.nan
+    groups["share_change_pp"] = 100 * (groups.observed_share - groups.expected_share)
+    groups["group_change_pct"] = 100 * gaps / expected.where(expected > 0)
+    groups["contribution_pp"] = 100 * gaps / expected_total if expected_total > 0 else np.nan
+    groups["net_change_share"] = gaps / delta if delta != 0 else np.nan
+    flags = []
+    if (expected == 0).any():
+        flags.append("Zero expected groups have undefined group percent change; count contributions remain available.")
+    if expected_total == 0 or observed_total == 0:
+        flags.append("A zero total makes its composition shares undefined; a zero expected total also makes contribution_pp undefined.")
+    if delta == 0:
+        flags.append("Zero net change: net_change_share is undefined. Inspect losses and gains separately.")
+    elif loss < 0 < gain:
+        flags.append("Offsets present: signed net_change_share can be negative or exceed 100%; do not label it share of gross losses.")
+    findings = [finding(label, metric, value, len(selected)) for label, metric, value in metrics]
+    row_counts = cells.groupby(group_keys, dropna=False, observed=True).size().reindex(groups.index)
+    for (key, row), n_rows in zip(groups.iterrows(), row_counts):
+        levels = (key,) if len(dimensions) == 1 else key
+        group = dict(zip(dimensions, levels))
+        label = "; ".join(f"{column}={value!r}" for column, value in group.items())
+        for metric in ("contribution", "contribution_pp"):
+            findings.append(finding(f"{label}: {metric}", metric, row[metric], n_rows, group=group))
+    return {"summary": f"{' × '.join(dimensions)}: losses {loss:+g}, gains {gain:+g}, net {delta:+g}",
+            "findings": findings, "tables": {"groups": groups.reset_index()},
+            "grouping_columns": dict(zip(group_keys, dimensions)), "flags": flags, "charts": [],
+            "notes": ["Each dimension or intersection explains the same total. Do not add overlapping partitions.",
+                      "Shares are fractions; group_change_pct is percent; contribution_pp and share_change_pp are percentage points.",
+                      "Expected is the prior-period count, or the projected count when history is supplied. All changes use that reference.",
+                      "contribution_pp = 100 * (observed - expected) / total expected. net_change_share uses the signed total gap.",
+                      "Small groups are retained. Compare percentage change with size and absolute contribution.",
+                      "Descriptive count attribution, not causal effects. Group percent change is undefined at zero expected count."]}

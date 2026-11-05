@@ -48,8 +48,12 @@ def test_full_screen_finds_late_dimension_and_missing_evidence(screen):
              "dimension_coverage": {label: {"status": "little movement", "reason": "Zero group gaps"}
                                     for label in results}}
     draft["dimension_coverage"]["H1.S3"] = {"status": "movement", "reason": "Loss of 12 offsets gain of 12"}
+    draft["intersection_review"] = {
+        "status": "unresolved", "reason": "Combined-dimension follow-up remains to be examined.",
+        "evidence": [{"result": "H1.S3"}]}
     assert review.validate_review(draft, ctx.run_dir) == []
-    assert report.dimension_rows(ctx.scope, draft)[-1][1] == "movement"
+    assert report.dimension_rows(ctx.scope, draft)[-2][1] == "movement"
+    assert report.dimension_rows(ctx.scope, draft)[-1][1] == "unresolved"
     del draft["dimension_coverage"]["H1.S3"]
     assert review.validate_review(draft, ctx.run_dir)
     steps.pop()
